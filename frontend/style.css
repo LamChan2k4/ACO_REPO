@@ -1,0 +1,99 @@
+body {
+        margin: 0;
+        font-family: 'Roboto', sans-serif;
+        background-color: #f4f6f8;
+        height: 100vh;
+        overflow: hidden; /* Không cho cuộn trang */
+    }
+
+    /* BỐ CỤC CHÍNH: Dùng Flexbox để chia đôi màn hình */
+    .app-container {
+        display: flex; /* Kích hoạt chế độ chia cột */
+        height: 100%;
+        flex-direction: row; /* Sắp xếp nằm ngang */
+    }
+
+    /* CỘT TRÁI: Đồ thị */
+    .visualization-area {
+        flex-grow: 1; /* Chiếm hết phần còn lại */
+        background-color: white;
+        position: relative;
+    }
+
+    #mynetwork {
+        width: 100%;
+        height: 100%;
+    }
+
+    /* CỘT PHẢI: Sidebar */
+    .sidebar {
+        width: 300px; /* Chiều rộng cố định */
+        background-color: #ffffff;
+        border-left: 1px solid #ddd;
+        padding: 20px;
+        box-shadow: -2px 0 5px rgba(0,0,0,0.05);
+        display: flex;
+        flex-direction: column;
+        gap: 15px; /* Khoảng cách giữa các ô nhập liệu */
+        overflow-y: auto; /* Cho phép cuộn nếu dài quá */
+    }
+
+    h2 { margin-top: 0; color: #333; font-size: 20px; }
+
+    /* CSS cho các ô nhập liệu (Control Group) */
+    .control-group {
+        display: flex;
+        flex-direction: column;
+    }
+
+    label {
+        font-size: 13px;
+        font-weight: 500;
+        color: #555;
+        margin-bottom: 5px;
+    }
+
+    input, select {
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+    /* CSS cho Nút bấm */
+    .btn-primary {
+        background-color: #2c3e50; /* Màu tối như trong ảnh */
+        color: white;
+        padding: 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background 0.2s;
+    }
+    .btn-primary:hover { background-color: #34495e; }
+
+    .btn-secondary {
+        background-color: #ecf0f1;
+        border: 1px solid #bdc3c7;
+        color: #333;
+        padding: 6px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .btn-secondary:hover { background-color: #d0d3d4; }
+
+    .status-text {
+        font-size: 14px;
+        text-align: center;
+        margin-top: 10px;
+        color: #27ae60;
+        font-weight: bold;
+    }
+    
+    #loading-overlay {
+        position: absolute; top: 50%; left: 50%; 
+        transform: translate(-50%, -50%);
+        background: rgba(0,0,0,0.7); color: white;
+        padding: 20px; border-radius: 8px;
+    }
