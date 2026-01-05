@@ -1,15 +1,15 @@
-# Sử dụng JDK 17 và Maven để build (Multi-stage build)
-FROM maven:3.8.4-openjdk-17-slim AS build
+# Stage 1: Build file JAR dùng Maven và Java 17 từ Temurin
+FROM maven:3.9.6-eclipse-temurin-17 AS build
 WORKDIR /app
 COPY pom.xml .
 COPY src ./src
-# Build file jar và bỏ qua test để chạy nhanh
+# Build ứng dụng
 RUN mvn clean package -DskipTests
 
-# Stage 2: Chỉ chạy ứng dụng với JRE nhẹ nhàng
-FROM openjdk:17-jdk-slim
+# Stage 2: Chỉ chạy ứng dụng với JRE nhẹ (chỉ khoảng 200MB thay vì 500MB)
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
-# Mở cổng 8081 như cấu hình của bạn
+# Mở cổng 8081
 EXPOSE 8081
 ENTRYPOINT ["java", "-jar", "app.jar"]
