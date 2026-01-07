@@ -175,7 +175,7 @@ async function runSimulation() {
         const serverHost = window.location.hostname;
 
         // 2. Chắp ghép thành URL đầy đủ cho API Backend
-        const API_URL = `http://${serverHost}:8081/api/simulate`;
+	const API_URL = "/api/simulate"; 
 
         // 3. Sử dụng biến này trong hàm fetch
         const response = await fetch(API_URL, {
