@@ -1,17 +1,17 @@
-version: '3.8'
 services:
   aco-api:
     build: ./backend
     container_name: aco-api
-    ports:
-      - "8081:8081"
+    expose: # Chỉ mở bên trong mạng docker
+      - "8081"
     restart: always
 
   aco-web:
     image: nginx:alpine
     container_name: aco-web
     ports:
-      - "80:80" # Cổng mặc định để truy cập web
+      - "80:80"
     volumes:
       - ./frontend:/usr/share/nginx/html
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro # Gắn file cấu hình Nginx
     restart: always

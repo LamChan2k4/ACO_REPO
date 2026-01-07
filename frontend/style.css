@@ -1,99 +1,192 @@
-body {
-        margin: 0;
-        font-family: 'Roboto', sans-serif;
-        background-color: #f4f6f8;
-        height: 100vh;
-        overflow: hidden; /* Không cho cuộn trang */
-    }
+/* ==========================================================================
+   RESET & NỀN TẢNG (NÊN GIỮ CHUẨN)
+   ========================================================================== */
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent; /* Bỏ viền xanh khi chạm trên Mobile */
+}
 
-    /* BỐ CỤC CHÍNH: Dùng Flexbox để chia đôi màn hình */
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background-color: #f4f7f6;
+    color: #333;
+}
+
+/* ==========================================================================
+   BỐ CỤC CHÍNH (LAYOUT)
+   ========================================================================== */
+.app-container {
+    display: flex;
+    flex-direction: row; /* Desktop: Sidebar bên phải */
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* KHU VỰC VẼ ĐỒ THỊ (CỘT TRÁI) */
+.visualization-area {
+    flex: 1;
+    height: 100%;
+    background-color: #ffffff;
+    position: relative;
+    border-right: 1px solid #e0e0e0;
+}
+
+#mynetwork {
+    width: 100%;
+    height: 100%;
+    outline: none;
+}
+
+/* SIDEBAR ĐIỀU KHIỂN (CỘT PHẢI) */
+.sidebar {
+    width: 320px;
+    height: 100%;
+    background: #ffffff;
+    padding: 24px;
+    overflow-y: auto; /* Cuộn dọc nếu nhiều tham số */
+    display: flex;
+    flex-direction: column;
+    box-shadow: -2px 0 10px rgba(0,0,0,0.05);
+}
+
+/* ==========================================================================
+   CÁC THÀNH PHẦN (COMPONENTS)
+   ========================================================================== */
+h2 {
+    margin: 0 0 20px 0;
+    font-size: 22px;
+    color: #2c3e50;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 10px;
+}
+
+h3 {
+    margin: 15px 0 10px 0;
+    font-size: 16px;
+    color: #7f8c8d;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.control-group {
+    margin-bottom: 18px;
+    display: flex;
+    flex-direction: column;
+}
+
+label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #555;
+    margin-bottom: 6px;
+}
+
+input, select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #dcdfe6;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+    background-color: #fff;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+hr {
+    border: 0;
+    height: 1px;
+    background: #ebeef5;
+    margin: 15px 0;
+}
+
+/* NÚT BẤM */
+button {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 10px;
+    border: none;
+}
+
+.btn-primary {
+    background-color: #2c3e50;
+    color: white;
+}
+.btn-primary:hover {
+    background-color: #34495e;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background-color: #ffffff;
+    border: 1px solid #dcdfe6;
+    color: #606266;
+}
+.btn-secondary:hover {
+    background-color: #f5f7fa;
+    border-color: #3498db;
+    color: #3498db;
+}
+
+.status-text {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    background: #f0f9eb;
+    color: #67c23a;
+    font-size: 13px;
+    text-align: center;
+    border: 1px solid #e1f3d8;
+    line-height: 1.4;
+}
+
+/* ==========================================================================
+   RWD: DÀNH CHO ĐIỆN THOẠI (DƯỚI 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
     .app-container {
-        display: flex; /* Kích hoạt chế độ chia cột */
-        height: 100%;
-        flex-direction: row; /* Sắp xếp nằm ngang */
+        /* Chuyển sang cột dọc và ép cao đúng bằng màn hình điện thoại */
+        flex-direction: column; 
+        height: 100vh; 
+        overflow: hidden; /* CẤM cuộn cả trang, để tránh mất dấu đồ thị */
     }
 
-    /* CỘT TRÁI: Đồ thị */
     .visualization-area {
-        flex-grow: 1; /* Chiếm hết phần còn lại */
-        background-color: white;
-        position: relative;
-    }
-
-    #mynetwork {
+        /* Cố định phần này luôn chiếm 45% màn hình */
+        height: 45vh; 
         width: 100%;
-        height: 100%;
+        flex-shrink: 0; /* KHÔNG cho phép đống Settings bóp nhỏ đồ thị */
+        background: white;
+        border-bottom: 3px solid #3498db;
+        z-index: 100;
     }
 
-    /* CỘT PHẢI: Sidebar */
     .sidebar {
-        width: 300px; /* Chiều rộng cố định */
+        /* Phần này chiếm 55% còn lại và TỰ CUỘN bên trong nó */
+        flex: 1; 
+        width: 100%;
+        height: auto;
+        padding: 15px;
+        overflow-y: auto; /* CHỈ CUỘN phần Settings ở đây thôi */
         background-color: #ffffff;
-        border-left: 1px solid #ddd;
-        padding: 20px;
-        box-shadow: -2px 0 5px rgba(0,0,0,0.05);
-        display: flex;
-        flex-direction: column;
-        gap: 15px; /* Khoảng cách giữa các ô nhập liệu */
-        overflow-y: auto; /* Cho phép cuộn nếu dài quá */
+        box-shadow: 0 -5px 15px rgba(0,0,0,0.05); /* Đổ bóng lên trên cho đẹp */
     }
 
-    h2 { margin-top: 0; color: #333; font-size: 20px; }
-
-    /* CSS cho các ô nhập liệu (Control Group) */
-    .control-group {
-        display: flex;
-        flex-direction: column;
-    }
-
-    label {
-        font-size: 13px;
-        font-weight: 500;
-        color: #555;
-        margin-bottom: 5px;
-    }
-
-    input, select {
-        padding: 8px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        font-size: 14px;
-    }
-
-    /* CSS cho Nút bấm */
-    .btn-primary {
-        background-color: #2c3e50; /* Màu tối như trong ảnh */
-        color: white;
-        padding: 12px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: bold;
-        transition: background 0.2s;
-    }
-    .btn-primary:hover { background-color: #34495e; }
-
-    .btn-secondary {
-        background-color: #ecf0f1;
-        border: 1px solid #bdc3c7;
-        color: #333;
-        padding: 6px 12px;
-        border-radius: 4px;
-        cursor: pointer;
-    }
-    .btn-secondary:hover { background-color: #d0d3d4; }
-
-    .status-text {
-        font-size: 14px;
-        text-align: center;
-        margin-top: 10px;
-        color: #27ae60;
-        font-weight: bold;
-    }
-    
-    #loading-overlay {
-        position: absolute; top: 50%; left: 50%; 
-        transform: translate(-50%, -50%);
-        background: rgba(0,0,0,0.7); color: white;
-        padding: 20px; border-radius: 8px;
-    }
+    /* Làm cho các nút to hơn và khít hơn trên điện thoại */
+    h2 { font-size: 18px; margin-bottom: 10px; }
+    .control-group { margin-bottom: 10px; }
+    button { padding: 12px; margin-bottom: 8px; }
+}
