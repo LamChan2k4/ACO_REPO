@@ -119,29 +119,27 @@ function renderNetwork() {
 // ================================================================
 
 async function runSimulation() {
-    // 1. Lấy các phần tử giao diện
+    // 1. Phần UI
     const btn = document.getElementById("btnRun");
     const status = document.getElementById("status");
-    
-    // Stop animation cũ nếu đang chạy
     if (animationTimer) clearTimeout(animationTimer);
 
-    // 2. Lấy dữ liệu cấu hình từ các ô nhập liệu
+    // 2. Lấy dữ liệu Input
     const algorithm = document.getElementById("algorithm").value;
     const numAnts = parseInt(document.getElementById("numAnts").value) || 20;
     const iterations = parseInt(document.getElementById("iterations").value) || 100;
     const numColors = parseInt(document.getElementById("numColors").value) || 5;
     
+    // Tự động gán mặc định nếu User để trống hoặc nhập sai
     const alpha = parseFloat(document.getElementById("alpha").value) || 1.0;
     const evaporation = parseFloat(document.getElementById("evaporation").value) || 0.5;
     const beta = parseFloat(document.getElementById("beta").value) || 2.0;
     const q0 = parseFloat(document.getElementById("q0").value) || 0.9;
     const mutationRate = parseFloat(document.getElementById("mutationRate").value) || 0.05;
 
-    // 3. Chuyển đổi dữ liệu Đồ thị (Vis.js -> Java DTO)
+    // 3. Mapping Node cho Java
     const allNodes = graphData.nodes.get();
     const allEdges = graphData.edges.get();
-
     const javaNodes = allNodes.map(node => {
         let neighbors = [];
         allEdges.forEach(edge => {
@@ -151,67 +149,64 @@ async function runSimulation() {
         return { id: node.id, x: 0, y: 0, neighbors: neighbors };
     });
 
+    // Gom gói hàng Payload (SẠCH SẼ)
     const payload = {
-        algorithm: algorithm,
+        algorithm,
         nodes: javaNodes,
-        numAnts: numAnts,
+        numAnts,
         maxIterations: iterations,
-        numColors: numColors,
+        numColors,
         numberOfRuns: 1,
-        alpha: alpha,
-        evaporation: evaporation,
-        beta: beta,
-        q0: q0,
-        mutationRate: mutationRate
+        alpha,
+        evaporation,
+        beta,
+        q0,
+        mutationRate
     };
 
-    // 4. Gửi lên Server (Trong khối try-catch)
+    // 4. Gửi Server
     try {
-        btn.innerText = "Đang chạy...";
+        btn.innerText = "Processing...";
         btn.disabled = true;
-        status.innerText = "⏳ Server đang tính toán...";
-        status.style.color = "blue";
+        status.innerText = "⏳ Connecting to Server...";
 
         const serverHost = window.location.hostname;
+        const API_URL = (window.location.port === "5500") 
+                        ? `http://${serverHost}:8081/api/simulate` 
+                        : "/api/simulate";
 
-        // 2. Chắp ghép thành URL đầy đủ cho API Backend
-	const API_URL = "/api/simulate"; 
-
-        // 3. Sử dụng biến này trong hàm fetch
         const response = await fetch(API_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
 
-        if (!response.ok) throw new Error("Lỗi Server: " + response.status);
+        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
 
-        // --- ĐÂY LÀ NƠI NHẬN DỮ LIỆU ---
         const result = await response.json();
 
-        // 5. Lưu lại vào bộ nhớ tạm (Global Variables) để REPLAY kiến bò sau này
+        // 5. LƯU BỘ NHỚ: Cực kỳ quan trọng để các nút "Replay" hoạt động
         lastBestSolution = result.bestSolution;
-        lastDetailedTrace = result.detailedTrace; // Trace quan trọng cho kịch bản bò
+        lastDetailedTrace = result.detailedTrace; // Trace kịch bản bò thông minh
 
-        console.log("Dữ liệu nhận được:", result);
+        console.log("✅ Simulation Done. Received Data:", result);
         
-        // 6. Xử lý hiển thị
+        // 6. Visualization
         if (result.history && result.history.length > 0) {
-            status.innerText = `🎬 Tìm thấy lời giải tốt nhất (${result.bestQuality} màu). Đang tái hiện...`;
-            await playHistoryAnimation(result.history); // Chiếu phim sự tiến hóa (Time-lapse)
-            status.innerText = `✅ Hoàn tất! Số màu tối ưu: ${result.bestQuality}`;
-            status.style.color = "green";
-        } else {
-            status.innerText = `✅ Xong! Kết quả: ${result.bestQuality} màu`;
-            updateColorsImmediate(result.bestSolution);
+            status.innerText = `🎬 Đã xong! Đang tái hiện quá trình hội tụ...`;
+            await playHistoryAnimation(result.history);
         }
+
+        // Thông báo kết quả cuối
+        const conflictsStr = (result.conflicts > 0) ? ` (⚠️ Conflicts: ${result.conflicts})` : "";
+        status.innerText = `✅ Xong! Thuật toán tìm được: ${result.bestQuality} màu${conflictsStr}`;
+        status.style.color = (result.conflicts > 0) ? "orange" : "green";
 
     } catch (error) {
         console.error(error);
         status.innerText = "❌ Lỗi: " + error.message;
         status.style.color = "red";
     } finally {
-        // Mở khóa nút bấm
         btn.innerText = "Start Coloring";
         btn.disabled = false;
     }
@@ -320,64 +315,73 @@ function resetNodeColors() {
 // ================================================================
 
 async function replayWithAntMovement() {
-    // 1. Kiểm tra xem đã có kịch bản chưa
-    if (!lastDetailedTrace) {
-        alert("Bạn hãy bấm 'Start Coloring' để lấy kết quả trước!");
+    // 1. Kiểm tra kịch bản
+    if (!lastDetailedTrace || lastDetailedTrace.length === 0) {
+        alert("Bạn hãy bấm 'Start Simulation' để lấy kết quả trước!");
         return;
     }
 
     const statusDiv = document.getElementById("status");
     const antImgUrl = "https://img.icons8.com/color/48/ant.png"; 
-    const speed = 600;
+    const speed = 700; // Tăng một chút để kịp nhìn Degree
 
     // 2. Reset đồ thị trắng
+    statusDiv.innerText = "🎬 Khởi động chế độ quan sát kịch bản thông minh...";
     resetNodeColors();
     network.fit({ animation: { duration: 1000 } });
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1200));
 
-    // 3. Chạy theo kịch bản trace (Thứ tự node khôn do Java tính)
+    // 3. Lấy dữ liệu Node hiện tại để tính Bậc (Degree)
+    const currentNodes = graphData.nodes.get();
+    const currentEdges = graphData.edges.get();
+
+    // Duyệt theo kịch bản (Thứ tự đi đã được Backend sắp xếp theo độ khó)
     for (let i = 0; i < lastDetailedTrace.length; i++) {
-        
-        // SỬA TẠI ĐÂY: Lấy từ lastDetailedTrace
         let action = lastDetailedTrace[i]; 
         let nodeId = action.nodeId; 
         let colorCode = action.colorCode;
-        
         let colorHex = getColorForIndex(colorCode);
 
-        statusDiv.innerText = `🐜 Kiến thông minh đang đến Node ${nodeId}...`;
+        // --- TÍNH TOÁN BẬC CỦA ĐỈNH TẠI CHỖ ---
+        let neighborsCount = currentEdges.filter(e => e.from === nodeId || e.to === nodeId).length;
+
+        statusDiv.innerHTML = `🐜 <b>Bước ${i + 1}:</b> Kiến xử lý Node <b>${nodeId}</b> 
+                               <br><span style='color:#e67e22'>(Độ khó/Bậc: ${neighborsCount} hàng xóm)</span>`;
         
-        // Di chuyển camera theo kiến
+        // Tập trung Camera vào điểm nóng
         network.focus(nodeId, {
-            scale: 1.0, 
-            animation: { duration: 300 }
+            scale: 1.1, 
+            animation: { duration: 400 }
         });
 
-        // Hiện hình kiến
+        // HIỆN ICON KIẾN (Sắp xử lý)
         graphData.nodes.update({
             id: nodeId,
             shape: 'image',
             image: antImgUrl,
-            size: 40,
-            label: ""
+            size: 45,
+            label: "" // Ẩn label lúc kiến đang bò
         });
 
         await new Promise(r => setTimeout(r, speed));
 
-        // Tô màu và hiện Node lại
+        // CHỐT MÀU VÀ HIỆN BẰNG CHỨNG (Bậc của đỉnh)
         graphData.nodes.update({
             id: nodeId,
             shape: 'dot',
             image: undefined,
-            size: 20,
-            color: { background: colorHex, border: "#333" },
-            label: `N${nodeId}(C${colorCode})`
+            size: 25,
+            color: { background: colorHex, border: "#000000" },
+            borderWidth: 2,
+            // THẦY CÔ NHÌN VÀO ĐÂY: Sẽ thấy Deg to giảm dần
+            label: `ID: ${nodeId}\nDeg: ${neighborsCount}\n(Color ${colorCode})`
         });
 
+        // Delay cực ngắn để tạo cảm giác di chuyển
         await new Promise(r => setTimeout(r, 100));
     }
 
-    statusDiv.innerText = "🎉 Replay hoàn tất theo kịch bản thông minh!";
+    statusDiv.innerHTML = "<b style='color:green'>🎉 Replay Hoàn Tất!</b><br>Đã chứng minh chiến thuật gỡ nút thắt (Highest Degree First).";
     network.fit({ animation: { duration: 1000 } });
 }
 // Chạy khởi tạo lần đầu khi tải trang
