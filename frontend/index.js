@@ -71,46 +71,57 @@ function generateRandomGraph() {
     renderNetwork();
 }
 
-// Hàm vẽ đồ thị lên màn hình (Cấu hình tối ưu cho 100+ Nodes)
 function renderNetwork() {
     const container = document.getElementById('mynetwork');
+    const nodeCount = graphData.nodes.length;
     
+    // NẾU LÀ DỮ LIỆU LỚN (Từ 500 node trở lên)
+    const isLarge = nodeCount > 500;
+
     const options = {
         layout: {
-            improvedLayout: false // TẮT cái này để tránh lỗi với đồ thị lớn
+            improvedLayout: false, // BẮT BUỘC TẮT với 1000 node để ko treo trình duyệt
+            randomSeed: 42 // Giúp các node tản ra ngẫu nhiên thay vì xếp vòng tròn
         },
         physics: {
             enabled: true,
-            solver: 'forceAtlas2Based', // Thuật toán tốt nhất cho mạng lưới lớn
+            solver: 'forceAtlas2Based', 
             forceAtlas2Based: {
-                gravitationalConstant: -50,
-                centralGravity: 0.01,
-                springLength: 100,
-                springConstant: 0.08,
-                damping: 0.4
+                gravitationalConstant: -100, // Lực đẩy giữa các node
+                centralGravity: 0.05,       // [QUAN TRỌNG] Tăng cái này để kéo các node vào tâm, xóa sổ vòng tròn rỗng
+                springLength: 50,           // Độ dài dây nối
+                springConstant: 0.1,
+                damping: 0.4,
+                avoidOverlap: 1             // Cố gắng ko để các node đè lên nhau
             },
             stabilization: {
                 enabled: true,
-                iterations: 1000, // Tính toán trước 1000 bước rồi mới hiện
+                iterations: 2000,           // Cho máy tính 2000 nhịp để "lắc" đồ thị ra form đẹp nhất
+                updateInterval: 100,
                 fit: true
             }
         },
         nodes: {
-            font: { color: '#333333' },
-            borderWidth: 1
+            shape: 'dot',
+            size: isLarge ? 5 : 15,         // Node càng nhiều thì vẽ càng bé để đỡ rối
+            borderWidth: 1,
+            font: { size: isLarge ? 0 : 12 } // Node quá nhiều thì ẩn chữ luôn cho nhẹ máy
         },
         edges: {
-            color: '#CCCCCC',
-            smooth: false // Tắt đường cong cho nhẹ máy
+            smooth: false,                  // Tắt đường cong (cực kỳ tốn CPU)
+            width: 0.5,
+            color: { inherit: 'from', opacity: 0.3 }, // Làm mờ cạnh để nhìn thấy các cụm màu rõ hơn
+            hidden: nodeCount > 800          // Nếu trên 800 node thì ẩn luôn cạnh, chỉ nhìn điểm màu cho "cháy"
         }
     };
 
     network = new vis.Network(container, graphData, options);
 
-    // Khi đồ thị đã ổn định vị trí, tắt vật lý để nó đứng im
+    // KHI ĐÃ LẮC XONG (ỔN ĐỊNH)
     network.on("stabilizationIterationsDone", function () {
-        network.setOptions({ physics: false });
-        document.getElementById("status").innerText = "Sẵn sàng (Graph Stable).";
+        // Tắt vật lý để trình duyệt ko bị nóng máy khi người dùng xem phim kiến bò
+        network.setOptions({ physics: { enabled: false } }); 
+        document.getElementById("status").innerText = "Đồ thị đã ổn định. Sẵn sàng tính toán!";
     });
 }
 
@@ -188,7 +199,12 @@ async function runSimulation() {
         // 5. LƯU BỘ NHỚ: Cực kỳ quan trọng để các nút "Replay" hoạt động
         lastBestSolution = result.bestSolution;
         lastDetailedTrace = result.detailedTrace; // Trace kịch bản bò thông minh
-
+        if (payload.nodes.length > 500) {
+            updateColorsImmediate(result.bestSolution);
+            status.innerText = "✅ Xong! Chế độ dữ liệu lớn: Hiện kết quả ngay.";
+        } else {
+            await playHistoryAnimation(result.history);
+        }
         console.log("✅ Simulation Done. Received Data:", result);
         
         // 6. Visualization
