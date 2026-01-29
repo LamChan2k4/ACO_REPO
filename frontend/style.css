@@ -1,192 +1,130 @@
-/* ==========================================================================
-   RESET & NỀN TẢNG (NÊN GIỮ CHUẨN)
-   ========================================================================== */
-* {
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent; /* Bỏ viền xanh khi chạm trên Mobile */
+:root {
+    --primary: #2c3e50;
+    --accent: #3498db;
+    --success: #27ae60;
+    --danger: #e74c3c;
+    --warning: #f1c40f;
+    --bg-dark: #1a1a1a;
+    --text-light: #ecf0f1;
 }
+
+* { box-sizing: border-box; }
 
 body, html {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    font-family: 'Roboto', sans-serif;
     background-color: #f4f7f6;
-    color: #333;
-}
-
-/* ==========================================================================
-   BỐ CỤC CHÍNH (LAYOUT)
-   ========================================================================== */
-.app-container {
-    display: flex;
-    flex-direction: row; /* Desktop: Sidebar bên phải */
-    width: 100%;
-    height: 100vh;
     overflow: hidden;
 }
 
-/* KHU VỰC VẼ ĐỒ THỊ (CỘT TRÁI) */
+.app-container {
+    display: flex;
+    width: 100%;
+    height: 100vh;
+}
+
+/* Visualization Area */
 .visualization-area {
     flex: 1;
-    height: 100%;
-    background-color: #ffffff;
     position: relative;
-    border-right: 1px solid #e0e0e0;
+    background: #ffffff;
+    border-right: 1px solid #ddd;
 }
 
 #mynetwork {
     width: 100%;
     height: 100%;
-    outline: none;
 }
 
-/* SIDEBAR ĐIỀU KHIỂN (CỘT PHẢI) */
+.stat-overlay {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    background: rgba(44, 62, 80, 0.95);
+    color: white;
+    padding: 15px;
+    border-radius: 12px;
+    width: 220px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    z-index: 10;
+}
+
+.stat-overlay h3 {
+    margin: 0 0 10px 0; font-size: 14px; color: var(--accent);
+}
+
+.stat-item {
+    display: flex; justify-content: space-between; margin-bottom: 5px;
+}
+
+.stat-item .value { font-weight: bold; color: var(--warning); font-size: 18px; }
+
+.badge {
+    background: var(--success); color: white; font-size: 10px;
+    padding: 2px 8px; border-radius: 4px; display: inline-block; margin-top: 10px;
+}
+
+/* Sidebar */
 .sidebar {
-    width: 320px;
-    height: 100%;
-    background: #ffffff;
-    padding: 24px;
-    overflow-y: auto; /* Cuộn dọc nếu nhiều tham số */
+    width: 350px;
+    background: #fff;
+    padding: 20px;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
     box-shadow: -2px 0 10px rgba(0,0,0,0.05);
 }
 
-/* ==========================================================================
-   CÁC THÀNH PHẦN (COMPONENTS)
-   ========================================================================== */
-h2 {
-    margin: 0 0 20px 0;
-    font-size: 22px;
-    color: #2c3e50;
-    border-bottom: 2px solid #3498db;
-    padding-bottom: 10px;
-}
+h2 { font-size: 20px; margin: 0; color: var(--primary); }
+h3 { font-size: 12px; text-transform: uppercase; color: #999; margin: 0 0 10px 0; letter-spacing: 1px; }
 
-h3 {
-    margin: 15px 0 10px 0;
-    font-size: 16px;
-    color: #7f8c8d;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.control-group {
-    margin-bottom: 18px;
-    display: flex;
-    flex-direction: column;
-}
-
-label {
-    font-size: 14px;
-    font-weight: 500;
-    color: #555;
-    margin-bottom: 6px;
-}
+.control-group { margin-bottom: 20px; }
+label { display: block; font-size: 13px; margin-bottom: 5px; color: #555; font-weight: 500; }
 
 input, select {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #dcdfe6;
-    border-radius: 6px;
-    font-size: 14px;
-    transition: border-color 0.2s;
-    background-color: #fff;
+    width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ddd;
+    font-size: 14px; background: #fafafa;
 }
 
-input:focus, select:focus {
-    outline: none;
-    border-color: #3498db;
-}
+.input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-hr {
-    border: 0;
-    height: 1px;
-    background: #ebeef5;
-    margin: 15px 0;
-}
+hr { border: 0; height: 1px; background: #eee; margin: 15px 0; }
 
-/* NÚT BẤM */
+/* Buttons */
 button {
-    width: 100%;
-    padding: 12px;
-    font-size: 14px;
-    font-weight: 600;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-bottom: 10px;
-    border: none;
+    width: 100%; padding: 12px; border-radius: 8px; border: none;
+    font-weight: 600; cursor: pointer; transition: 0.3s;
+    margin-bottom: 10px; font-size: 13px;
 }
 
-.btn-primary {
-    background-color: #2c3e50;
-    color: white;
-}
-.btn-primary:hover {
-    background-color: #34495e;
-    transform: translateY(-1px);
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: #34495e; transform: translateY(-2px); }
+
+.btn-primary-alt { background: var(--accent); color: white; margin-top: 10px; }
+
+.btn-secondary { background: #fff; border: 1px solid #ddd; color: #555; }
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+.btn-outline { background: transparent; border: 1.5px solid #e67e22; color: #e67e22; }
+
+.status-box {
+    margin-top: auto; padding: 12px; border-radius: 6px; background: #f0f9eb;
+    color: var(--success); text-align: center; font-size: 13px; border: 1px solid #e1f3d8;
 }
 
-.btn-secondary {
-    background-color: #ffffff;
-    border: 1px solid #dcdfe6;
-    color: #606266;
-}
-.btn-secondary:hover {
-    background-color: #f5f7fa;
-    border-color: #3498db;
-    color: #3498db;
+.file-box {
+    background: #f8fbff; border: 1px dashed var(--accent); padding: 15px; border-radius: 8px;
 }
 
-.status-text {
-    margin-top: 10px;
-    padding: 10px;
-    border-radius: 4px;
-    background: #f0f9eb;
-    color: #67c23a;
-    font-size: 13px;
-    text-align: center;
-    border: 1px solid #e1f3d8;
-    line-height: 1.4;
+#dimacsFile { display: none; }
+.custom-file-upload {
+    display: block; padding: 8px; background: #fff; border: 1px solid #ddd;
+    text-align: center; border-radius: 4px; cursor: pointer; color: var(--accent);
 }
 
-/* ==========================================================================
-   RWD: DÀNH CHO ĐIỆN THOẠI (DƯỚI 768px)
-   ========================================================================== */
 @media (max-width: 768px) {
-    .app-container {
-        /* Chuyển sang cột dọc và ép cao đúng bằng màn hình điện thoại */
-        flex-direction: column; 
-        height: 100vh; 
-        overflow: hidden; /* CẤM cuộn cả trang, để tránh mất dấu đồ thị */
-    }
-
-    .visualization-area {
-        /* Cố định phần này luôn chiếm 45% màn hình */
-        height: 45vh; 
-        width: 100%;
-        flex-shrink: 0; /* KHÔNG cho phép đống Settings bóp nhỏ đồ thị */
-        background: white;
-        border-bottom: 3px solid #3498db;
-        z-index: 100;
-    }
-
-    .sidebar {
-        /* Phần này chiếm 55% còn lại và TỰ CUỘN bên trong nó */
-        flex: 1; 
-        width: 100%;
-        height: auto;
-        padding: 15px;
-        overflow-y: auto; /* CHỈ CUỘN phần Settings ở đây thôi */
-        background-color: #ffffff;
-        box-shadow: 0 -5px 15px rgba(0,0,0,0.05); /* Đổ bóng lên trên cho đẹp */
-    }
-
-    /* Làm cho các nút to hơn và khít hơn trên điện thoại */
-    h2 { font-size: 18px; margin-bottom: 10px; }
-    .control-group { margin-bottom: 10px; }
-    button { padding: 12px; margin-bottom: 8px; }
+    .app-container { flex-direction: column; }
+    .visualization-area { height: 40vh; }
+    .sidebar { width: 100%; flex: 1; }
 }

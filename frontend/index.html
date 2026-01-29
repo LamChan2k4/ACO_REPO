@@ -3,113 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Đảm bảo file css tên là style.css và nằm cùng thư mục -->
-    <link rel="stylesheet" href="style.css">
-    <title>ACO Graph Coloring</title>
-    <!-- Import thư viện Vis.js -->
+    <title>AI Lab: ACO Graph Coloring</title>
+    
+    <!-- Phông chữ & Icon -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Thư viện Vẽ đồ thị -->
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div class="app-container">
         
-        <!-- HỘP TRÁI: Khu vực vẽ đồ thị -->
+        <!-- BÊN TRÁI: Khu vực hiển thị đồ thị (Lab Canvas) -->
         <div class="visualization-area">
             <div id="mynetwork"></div>
-            <div id="loading-overlay" style="display: none;">Wait for ants...</div>
+            
+            <!-- Thẻ thống kê nhanh (Benchmarking Card) -->
+            <div id="benchmark-card" class="stat-overlay" style="display: none;">
+                <h3><i class="fa-solid fa-gauge-high"></i> ANALYSIS</h3>
+                <div class="stat-item">
+                    <span class="label">Colors Used:</span>
+                    <span id="res-colors" class="value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="label">Time (Java):</span>
+                    <span id="res-time" class="value">0</span> <span class="unit">ms</span>
+                </div>
+                <div class="badge">Performance Stable</div>
+            </div>
         </div>
 
-        <!-- HỘP PHẢI: Sidebar -->
+        <!-- BÊN PHẢI: Sidebar Điều khiển -->
         <div class="sidebar">
-            <h2>Settings</h2>
-            
-            <!-- 1. TẠO ĐỒ THỊ -->
+            <div class="sidebar-header">
+                <h2><i class="fa-solid fa-microchip"></i> Algorithm Lab</h2>
+            </div>
+
+            <!-- Khối 1: Khởi tạo dữ liệu -->
             <div class="control-group">
-                <label># of Nodes</label>
-                <input type="number" id="nodeCount" value="20">
-                <div class="btn-group-row">
-                    <button onclick="generateRandomGraph()" class="btn-secondary">Generate Graph</button>
+                <h3>1. Data Initialization</h3>
+                <label>Node Count</label>
+                <input type="number" id="nodeCount" value="20" min="5" max="1000">
+                <button onclick="generateRandomGraph()" class="btn-secondary">
+                    <i class="fa-solid fa-shuffle"></i> Generate Random
+                </button>
+                <button onclick="freezeGraph()" class="btn-secondary" style="border-color: #2c3e50; color: #2c3e50;">
+                    <i class="fa-solid fa-lock"></i> Freeze Map (Dừng di chuyển)
+                </button>
+            </div>
+
+            <hr>
+
+            <!-- Khối 2: Chọn thuật toán (Bộ não) -->
+            <div class="control-group">
+                <h3>2. Logic Selection</h3>
+                <label>Target Algorithm</label>
+                <select id="algorithm">
+                    <option value="MMAS">Min-Max Ant System (Elite)</option>
+                    <option value="ACS">Ant Colony System (ACS)</option>
+                    <option value="SimpleGreedy">Welch-Powell (Greedy)</option>
+                    <option value="AS">Ant System (AS)</option>
+                    <option value="GA">Genetic Algorithm (GA)</option>
+                </select>
+            </div>
+
+            <hr>
+
+            <!-- 3. PARAMETERS (HYPER-PARAMS) -->
+            <div class="control-group">
+                <label>Colors Pool (Kho chứa màu):</label>
+    <input type="number" id="numColors" value="10" min="2" max="1000" 
+           placeholder="Ví dụ: 3, 7, 20..." 
+           style="font-weight: bold; color: #2ecc71;">
+    <small style="color: #999; font-size: 11px;">Nhập số màu tối đa mà bầy kiến được dùng.</small>
+                <h3>3. Parameters</h3>
+                <div class="input-grid">
+                    <div><label>Ants/Pop</label><input type="number" id="numAnts" value="30"></div>
+                    <div><label>Iterations</label><input type="number" id="iterations" value="100"></div>
+                </div>
+                
+                <div class="input-grid" style="margin-top:10px;">
+                    <div><label>Alpha (mùi)</label><input type="number" id="alpha" value="1.0" step="0.1"></div>
+                    <div><label>Beta (bậc)</label><input type="number" id="beta" value="2.0" step="0.1"></div>
+                </div>
+                
+                <label style="margin-top:10px;">Evaporation (ρ)</label>
+                <input type="number" id="evaporation" value="0.1" step="0.01">
+
+                <!-- CÁC THAM SỐ ẨN: Chỉ hiện khi cần -->
+                <div id="extra-params-acs" style="display: none; margin-top: 10px; border-top: 1px dashed #ddd; padding-top: 10px;">
+                    <label>Q0 (Exploitation rate)</label>
+                    <input type="number" id="q0" value="0.9" step="0.05" max="1.0">
+                </div>
+
+                <div id="extra-params-ga" style="display: none; margin-top: 10px; border-top: 1px dashed #ddd; padding-top: 10px;">
+                    <div class="input-grid">
+                        <div><label>Mutation (%)</label><input type="number" id="mutationRate" value="0.05" step="0.01"></div>
+                        <div><label>Tour. Size</label><input type="number" id="tournamentSize" value="5"></div>
+                    </div>
                 </div>
             </div>
 
             <hr>
 
-            <!-- 2. CHỌN THUẬT TOÁN -->
-            <div class="control-group">
-                <label>Algorithm</label>
-                <select id="algorithm">
-                    <option value="AS">Ant System (AS)</option>
-                    <option value="ACS">Ant Colony System</option>
-                    <option value="GA">Genetic Algorithm</option>
-                </select>
-            </div>
-
-            <!-- 3. CÁC THAM SỐ CHUNG -->
-            <div class="control-group">
-                <label>Num Ants / Population</label>
-                <input type="number" id="numAnts" value="30">
-            </div>
-
-            <div class="control-group">
-                <label>Iterations / Generations</label>
-                <input type="number" id="iterations" value="100">
-            </div>
-
-            <div class="control-group">
-                <label>Colors Limit</label>
-                <input type="number" id="numColors" value="5">
-            </div>
-
-            <div class="control-group">
-                <label>Evaporation / Mutation Rate</label>
-                <input type="number" id="evaporation" value="0.5" step="0.01">
-            </div>
-
-            <div class="control-group">
-                <label>Alpha (Pheromone Weight)</label>
-                <input type="number" id="alpha" value="1.0" step="0.1">
-            </div>
-
-            <hr>
-            <!-- 4. CÁC THAM SỐ NÂNG CAO (ACS / GA) -->
-            <!-- Gom lại nhìn cho gọn -->
-            
-            <div class="control-group">
-                <label>Beta (Heuristic - ACS only)</label>
-                <input type="number" id="beta" value="2.0" step="0.1">
-            </div>
-            <div class="control-group">
-                <label>Q0 (Exploitation - ACS only)</label>
-                <input type="number" id="q0" value="0.9" step="0.05" max="1.0">
-            </div>
-            
-            <!-- Vì ô evaporation dùng chung được cho mutationRate (cùng bản chất 0-1) 
-                 nhưng nếu muốn tách riêng ô input mutationRate như bạn làm cũng ok -->
-            <div class="control-group">
-                <label>Mutation Rate Specific (GA only)</label>
-                <input type="number" id="mutationRate" value="0.05" step="0.01">
-            </div>
-
-            <br>
-
-            <!-- 5. KHU VỰC NÚT BẤM (GOM VÀO 1 CHỖ) -->
-            <!-- Đã xóa cái nút btnRun bị thừa ở trên -->
-            <div class="control-group">
-                <button onclick="runSimulation()" class="btn-primary" id="btnRun">Start Coloring</button>
+            <!-- Khối 4: Upload file chuẩn (Học thuật) -->
+            <div class="control-group file-box">
+                <h3>4. External Data (DIMACS)</h3>
+                <label for="dimacsFile" class="custom-file-upload">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> <span id="fileNameLabel">Chọn file .col</span>
+                </label>
+                <input type="file" id="dimacsFile" accept=".col" onchange="displayFileName()">
                 
-                <button onclick="replayWithAntMovement()" class="btn-secondary" style="margin-top: 10px; border: 2px solid #e67e22; color: #e67e22; font-weight: bold;">
-                    🐜 Xem Kiến Bò (Micro Replay)
+                <button id="btnSolveFile" onclick="runDimacsSimulation()" class="btn-primary-alt" style="margin-top:10px;">
+                    <i class="fa-solid fa-bolt"></i> Solve DIMACS File
                 </button>
             </div>
 
-            <!-- Thanh trạng thái -->
-            <div id="status" class="status-text">Ready</div>
+            <!-- Khối 5: Action -->
+            <div class="actions">
+                <button id="btnRun" onclick="runSimulation()" class="btn-primary">
+                    <i class="fa-solid fa-play"></i> START COMPUTATION
+                </button>
+                <button onclick="replayWithAntMovement()" class="btn-outline">
+                    <i class="fa-solid fa-bug"></i> REPLAY TRACE
+                </button>
+            </div>
+
+            <!-- Status Bar -->
+            <div id="status" class="status-box">Ready for R&D</div>
         </div>
 
     </div>
 
-    <!-- Lưu ý: Đảm bảo tên file js của bạn trùng khớp. Nếu bạn lưu là script.js thì sửa dòng dưới -->
-    <script src="index.js"></script> 
+    <!-- Script main logic -->
+    <script src="index.js"></script>
 </body>
 </html>

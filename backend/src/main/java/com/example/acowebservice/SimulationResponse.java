@@ -3,29 +3,53 @@ package com.example.acowebservice;
 import java.util.List;
 
 public class SimulationResponse {
+	
     private int bestQuality;
     private int[] bestSolution;
     private int conflicts;
-    // Cái này chứa cuộn phim time-lapse
     private List<SimulationStep> history;
     private List<NodeColorAction> detailedTrace;
-    // Constructor
-    public SimulationResponse(int bestQuality, int[] bestSolution, List<SimulationStep> history, int conflicts,List<NodeColorAction> detailedTrace) {
-        this.bestQuality = bestQuality;
-        this.bestSolution = bestSolution;
-        this.history = history;
-        this.conflicts = conflicts;
-        this.detailedTrace = detailedTrace;
+    private long executionTimeMs;
+    
+    // ✅ THÊM TRƯỜNG NÀY: Để gửi lại cấu trúc đồ thị ( Neighbors, X, Y ) cho Frontend vẽ
+    private List<Node> nodes; 
+
+    // --- 1. CONSTRUCTOR MẶC ĐỊNH (Rất quan trọng cho JSON) ---
+    public SimulationResponse() {
     }
 
-    public List<NodeColorAction> getDetailedTrace() {
-        return detailedTrace;
-    }
-    // --- GETTER (BẮT BUỘC PHẢI CÓ ĐỦ) ---
+    // --- 2. CONSTRUCTOR ĐẦY ĐỦ THAM SỐ (6 tham số cũ + 1 mới) ---
+    public SimulationResponse(int bestQuality, int[] bestSolution, int conflicts, List<SimulationStep> history,
+			List<NodeColorAction> detailedTrace, long executionTimeMs, List<Node> nodes) {
+		super();
+		this.bestQuality = bestQuality;
+		this.bestSolution = bestSolution;
+		this.conflicts = conflicts;
+		this.history = history;
+		this.detailedTrace = detailedTrace;
+		this.executionTimeMs = executionTimeMs;
+		this.nodes = nodes; // Lưu lại danh sách node có chứa neighbor
+	}
+
+    // --- GETTER & SETTER ---
+    public List<Node> getNodes() { return nodes; }
+    public void setNodes(List<Node> nodes) { this.nodes = nodes; }
+
     public int getBestQuality() { return bestQuality; }
-    public int[] getBestSolution() { return bestSolution; }
-    public int getConflicts() { return conflicts; }
-    // Spring Boot tìm hàm này để tạo ra field "history" trong JSON
-    public List<SimulationStep> getHistory() { return history; }
-}
+    public void setBestQuality(int bestQuality) { this.bestQuality = bestQuality; }
 
+    public int[] getBestSolution() { return bestSolution; }
+    public void setBestSolution(int[] bestSolution) { this.bestSolution = bestSolution; }
+
+    public int getConflicts() { return conflicts; }
+    public void setConflicts(int conflicts) { this.conflicts = conflicts; }
+
+    public List<SimulationStep> getHistory() { return history; }
+    public void setHistory(List<SimulationStep> history) { this.history = history; }
+
+    public List<NodeColorAction> getDetailedTrace() { return detailedTrace; }
+    public void setDetailedTrace(List<NodeColorAction> detailedTrace) { this.detailedTrace = detailedTrace; }
+
+    public long getExecutionTimeMs() { return executionTimeMs; }
+    public void setExecutionTimeMs(long executionTimeMs) { this.executionTimeMs = executionTimeMs; }
+}
