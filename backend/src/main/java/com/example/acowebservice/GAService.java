@@ -18,10 +18,14 @@ public class GAService implements SolverStrategy{
 	    
         List<Node> nodes = req.getNodes();
         
-        int popSize = req.getNumAnts(); // Population Size
+        int popSize = (req.getNumAnts() != null) ? req.getNumAnts() : 50; // Dùng numAnts làm PopSize
+        int generations = (req.getMaxIterations() != null) ? req.getMaxIterations() : 100;
+        
+        // ✅ FIX LỖI NULL CHO GA
+        double mutationRate = (req.getMutationRate() != null) ? req.getMutationRate() : 0.05;
+        int tournamentSize = (req.getTournamentSize() != null) ? req.getTournamentSize() : 5;
         int maxGenerations = req.getMaxIterations();
         int numColors = req.getNumColors();
-        double mutationRate = req.getMutationRate();
         List<Node> validNodes = req.getNodes().stream()
                 .filter(n -> n != null && n.getId() != null)
                 .collect(Collectors.toList());

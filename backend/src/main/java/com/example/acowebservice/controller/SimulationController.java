@@ -27,7 +27,7 @@ public class SimulationController {
     @Autowired private DimacsService dimacsService;
 
     /**
-     * API 1: Chạy mô phỏng qua dữ liệu JSON (đồ thị vẽ tay)
+     * API 1: Chạy mô phỏng qua dữ liệu JSON (đồ thị vẽ tay trên web)
      */
     @PostMapping("/api/simulate")
     public Object runSimulation(@RequestBody SimulationRequest request) {
@@ -54,6 +54,7 @@ public class SimulationController {
 
     /**
      * API 2: Giải bài toán qua file DIMACS (.col)
+     * Đã bổ sung các tham số q0, mutationRate, tournamentSize để tránh lỗi NULL
      */
     @PostMapping("/api/aco/solve-dimacs")
     public ResponseEntity<SimulationResponse> solveWithDimacs(
@@ -64,7 +65,11 @@ public class SimulationController {
             @RequestParam("numColors") int numColors,
             @RequestParam("alpha") double alpha,
             @RequestParam("beta") double beta,
-            @RequestParam("evaporation") double evaporation
+            @RequestParam("evaporation") double evaporation,
+            // --- CÁC THAM SỐ BỔ SUNG ĐỂ FIX LỖI NULL ---
+            @RequestParam(value = "q0", required = false, defaultValue = "0.9") Double q0,
+            @RequestParam(value = "mutationRate", required = false, defaultValue = "0.05") Double mutationRate,
+            @RequestParam(value = "tournamentSize", required = false, defaultValue = "5") Integer tournamentSize
     ) {
         // --- QUY TRÌNH QUẢN LÝ LUỒNG ---
         taskControlService.interruptExistingTask();
@@ -73,10 +78,11 @@ public class SimulationController {
         System.out.println("\n>>> 📁 [DIMACS] Processing file: " + file.getOriginalFilename());
         
         try {
+            // 1. Parser file .col thành danh sách Node
             List<Node> nodes = dimacsService.parseDimacsFile(file);
             System.out.println(">>> Nodes parsed: " + nodes.size());
 
-            // Build request object
+            // 2. Build request object đầy đủ tham số
             SimulationRequest request = new SimulationRequest();
             request.setNodes(nodes);
             request.setAlgorithm(algorithm);
@@ -86,7 +92,13 @@ public class SimulationController {
             request.setAlpha(alpha);
             request.setBeta(beta);
             request.setEvaporation(evaporation);
+            
+            // Nạp các tham số đặc thù vào request
+            request.setQ0(q0);
+            request.setMutationRate(mutationRate);
+            request.setTournamentSize(tournamentSize);
 
+            // 3. Chọn thuật toán và giải
             SolverStrategy solver = selectSolver(algorithm);
             System.out.println(">>> 🧠 Algorithm in Progress: " + algorithm.toUpperCase());
             
@@ -115,7 +127,7 @@ public class SimulationController {
     }
 
     /**
-     * Lựa chọn chiến thuật dựa trên algorithm name
+     * Lựa chọn chiến thuật giải thuật
      */
     private SolverStrategy selectSolver(String algoType) {
         if (algoType == null) return asService;

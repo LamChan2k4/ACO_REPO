@@ -16,13 +16,17 @@ public class ACSService implements SolverStrategy  {
 	public SimulationResponse solve(SimulationRequest req) {
 		long startNano = System.nanoTime(); 
 	    List<Node> nodes = req.getNodes();
-	    int numAnts = req.getNumAnts();
-	    int maxIterations = req.getMaxIterations();
-	    int numColors = req.getNumColors();
-	    double alpha = req.getAlpha();
-	    double beta = req.getBeta(); 
-	    double q0 = req.getQ0();
-	    double rho = req.getEvaporation(); 
+	    
+	    int numAnts = (req.getNumAnts() != null) ? req.getNumAnts() : 30;
+	    int maxIterations = (req.getMaxIterations() != null) ? req.getMaxIterations() : 100;
+	    int numColors = (req.getNumColors() != null) ? req.getNumColors() : 20;
+	    
+	    double alpha = (req.getAlpha() != null) ? req.getAlpha() : 1.0;
+	    double beta = (req.getBeta() != null) ? req.getBeta() : 2.0;
+	    double rho = (req.getEvaporation() != null) ? req.getEvaporation() : 0.1;
+	    
+	    // ✅ ĐÂY LÀ CHỖ QUAN TRỌNG: Fix lỗi sập khi chạy ACS
+	    double q0 = (req.getQ0() != null) ? req.getQ0() : 0.9;
 	    double xi = 0.1; // Local evaporation
 	    List<Node> validNodes = req.getNodes().stream()
 	            .filter(n -> n != null && n.getId() != null)
