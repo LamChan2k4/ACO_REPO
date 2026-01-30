@@ -1,389 +1,259 @@
 package com.example.acowebservice;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+
+import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Random;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AntSystemService implements SolverStrategy {
-	
 
-	@Override
-	public SimulationResponse solve(SimulationRequest req) {
-	    List<Node> nodes = req.getNodes();
-	    int numAnts = req.getNumAnts();
-	    int maxIterations = req.getMaxIterations();
-	    int numColors = req.getNumColors();
-	    double alpha = req.getAlpha();
-	    double rho = req.getEvaporation(); 
-	    double initialPheromone = 1.0;
-	    List<Node> validNodes = req.getNodes().stream()
-	            .filter(n -> n != null && n.getId() != null)
-	            .collect(Collectors.toList());
-	        
-	        if (validNodes.isEmpty()) {
-	            System.out.println(">>> [CẢNH BÁO] Không có Node nào hợp lệ!");
-	            // Trả về rỗng thay vì ném ra Exception làm sập server
-	            return new SimulationResponse(0, new int[0], 0, new ArrayList<>(), new ArrayList<>(), 0,
-	            	    validNodes );
-	        }
+    @Override
+    public SimulationResponse solve(SimulationRequest req) {
+        // --- 1. KHỞI TẠO VÀ BẤM GIỜ (NANO) ---
+        long startNano = System.nanoTime();
+        
+        List<Node> nodes = req.getNodes();
+        int numAnts = (req.getNumAnts() != null) ? req.getNumAnts() : 30;
+        int maxIterations = (req.getMaxIterations() != null) ? req.getMaxIterations() : 100;
+        int numColors = (req.getNumColors() != null) ? req.getNumColors() : 20;
+        double alpha = (req.getAlpha() != null) ? req.getAlpha() : 1.0;
+        double rho = (req.getEvaporation() != null) ? req.getEvaporation() : 0.1;
+        double initialPheromone = 1.0;
 
-	        int numNodes = validNodes.size();
-	    List<Integer> bestTourOrder = new ArrayList<>();
-	 // 1. Bắt đầu bấm giây bằng Nano (Chuẩn nhất cho Benchmark)
-	    long startNano = System.nanoTime(); 
-	    
-	    // --- BƯỚC 1: SMART ORDERING (BẬC CAO ĐỨNG ĐẦU) ---
-	    List<Node> sortedNodes = new ArrayList<>(nodes);
-	    sortedNodes.sort((n1, n2) -> n2.getNeighbors().size() - n1.getNeighbors().size());
-	    int[] walkingOrder = new int[numNodes];
-	    for (int i = 0; i < numNodes; i++) walkingOrder[i] = sortedNodes.get(i).getId();
+        // Lọc node rác
+        List<Node> validNodes = nodes.stream()
+                .filter(n -> n != null && n.getId() != null)
+                .collect(Collectors.toList());
 
-	    // --- BƯỚC 2: KHỞI TẠO BỘ NHỚ ---
-	    Ant[] ants = new Ant[numAnts];
-	    for(int i = 0; i < numAnts; i++) ants[i] = new Ant(numNodes);
-	    double[][] pheromoneMatrix = new double[numNodes][numColors];
-	    int[] bestSolution = new int[numNodes];
-	    int bestSolutionQuality = Integer.MAX_VALUE;
-	    
-	    initializePheromones(pheromoneMatrix, numNodes, numColors, initialPheromone);
-	    List<SimulationStep> history = new ArrayList<>();
+        if (validNodes.isEmpty()) return new SimulationResponse(0, new int[0], 0, new ArrayList<>(), new ArrayList<>(), 0, validNodes);
 
-	    // --- BƯỚC 3: VÒNG LẶP CHÍNH ---
-	    /*
-	    for (int i = 0; i < maxIterations; i++) {
-	        // CẢI TIẾN: Cho kiến đi (truyền thêm walkingOrder)
-	        constructSolutions(ants, numNodes, pheromoneMatrix, alpha, nodes, numColors, walkingOrder);
-	        updatePheromones(numNodes, pheromoneMatrix, rho, ants, numColors);
-	        
-	        boolean foundNewBest = false;
-	        for (Ant ant : ants) {
-	            int cost = ant.getNumberOfColorsUsed();
-	            if (cost < bestSolutionQuality) {
-	                bestSolutionQuality = cost;
-	                System.arraycopy(ant.getSolution(), 0, bestSolution, 0, numNodes);
-	                foundNewBest = true;
-	            }
-	        }
-	        boolean shouldSaveHistory = foundNewBest || i == 0 || i == maxIterations - 1;
-	        
-	        // Nếu là đồ thị nhỏ, ta lưu thêm mỗi 10 vòng để xem cho mượt
-	        if (numNodes < 300 && (i + 1) % 10 == 0) {
-	            shouldSaveHistory = true;
-	        }
+        int numNodes = validNodes.size();
+        
+        // --- 2. CHUẨN BỊ DỮ LIỆU TỐI ƯU ---
+        // Cache bậc của node để không phải gọi hàm size() liên tục
+        int[] nodeDegrees = new int[numNodes];
+        for (int i = 0; i < numNodes; i++) {
+            nodeDegrees[i] = validNodes.get(i).getNeighbors().size();
+        }
 
-	        if (shouldSaveHistory) {
-	            // Sử dụng tên hàm calculateConfidence đồng nhất
-	            double[] currentConf = calculateACOConfidence(pheromoneMatrix, bestSolution, numColors);
+        double[][] pheromoneMatrix = new double[numNodes][numColors];
+        initializePheromones(pheromoneMatrix, numNodes, numColors, initialPheromone);
 
-	            history.add(new SimulationStep(
-	                i + 1, 
-	                bestSolutionQuality, 
-	                bestSolution.clone(), // Copy dữ liệu sang mảng mới
-	                currentConf
-	            ));
-	            
-	            // Giới hạn an toàn: Nếu history quá 50 bức ảnh, xóa bức ảnh cũ nhất 
-	            // (để trình duyệt không bị treo khi nhận JSON quá to)
-	            if (history.size() > 50) {
-	                history.remove(0); 
-	            }
-	        }*/
-	    for (int i = 0; i < maxIterations; i++) {
-	    	if (Thread.currentThread().isInterrupted()) {
-	            System.out.println("🛑 [LOG] AS bị buộc dừng để giải phóng CPU.");
-	            // Trả về kết quả rỗng hoặc null thay vì chạy tiếp
-	            return new SimulationResponse(0, new int[0], 0, new ArrayList<>(), new ArrayList<>(), 0, new ArrayList<>());
-	        }
-	        // CẢI TIẾN: Cho kiến đi (truyền thêm walkingOrder)
-	    	constructSolutionsNodeDSATUR(ants, numNodes, pheromoneMatrix, alpha, nodes, numColors, initialPheromone, 0);
-	        updatePheromones(numNodes, pheromoneMatrix, rho, ants, numColors);
-	        
-	        boolean foundNewBest = false;
-	        for (Ant ant : ants) {
-	            int cost = ant.getNumberOfColorsUsed();
-	            if (cost < bestSolutionQuality) {
-	                bestSolutionQuality = cost;
-	                System.arraycopy(ant.getSolution(), 0, bestSolution, 0, numNodes);
-	                bestTourOrder = new ArrayList<>(ant.getTourOrder());
-	                foundNewBest = true;
-	            }
-	        }
-	        boolean shouldSaveHistory = foundNewBest || i == 0 || i == maxIterations - 1;
-	        
-	        // Nếu là đồ thị nhỏ, ta lưu thêm mỗi 10 vòng để xem cho mượt
-	        if (numNodes < 300 && (i + 1) % 10 == 0) {
-	            shouldSaveHistory = true;
-	        }
+        Ant[] ants = new Ant[numAnts];
+        for (int i = 0; i < numAnts; i++) ants[i] = new Ant(numNodes);
 
-	        if (shouldSaveHistory) {
-	            // Sử dụng tên hàm calculateConfidence đồng nhất
-	            double[] currentConf = calculateACOConfidence(pheromoneMatrix, bestSolution, numColors);
+        int[] bestSolution = new int[numNodes];
+        int bestSolutionQuality = Integer.MAX_VALUE;
+        List<Integer> bestTourOrder = new ArrayList<>();
+        List<SimulationStep> history = new ArrayList<>();
 
-	            history.add(new SimulationStep(
-	                i + 1, 
-	                bestSolutionQuality, 
-	                bestSolution.clone(), // Copy dữ liệu sang mảng mới
-	                currentConf
-	            ));
-	            
-	            // Giới hạn an toàn: Nếu history quá 50 bức ảnh, xóa bức ảnh cũ nhất 
-	            // (để trình duyệt không bị treo khi nhận JSON quá to)
-	            if (history.size() > 50) {
-	                history.remove(0); 
-	            }
-	        }
-	    }
-	    long endNano = System.nanoTime();
-	    long duration = (endNano - startNano) / 1_000_000; 
-	    if (duration == 0) {
-	        System.out.println(">>> [" + this.getClass().getSimpleName() + "] Super fast! Microseconds: " + (endNano - startNano) / 1000);
-	    }
+        // --- 3. VÒNG LẶP CHÍNH (VÙNG TỐI ƯU) ---
+        for (int i = 0; i < maxIterations; i++) {
+            // Kiểm tra tín hiệu dừng khẩn cấp (F5/Refresh)
+            if (Thread.currentThread().isInterrupted()) {
+                System.out.println("🛑 [LOG] AS dừng để giải phóng CPU Pentium.");
+                return new SimulationResponse(); 
+            }
 
-	    // --- BƯỚC 4: TẠO TRACE CHO REPLAY ---
-	 // --- BƯỚC 4: TẠO TRACE CHO REPLAY (Đã sửa để hiển thị thứ tự thật) ---
-	    List<NodeColorAction> trace = new ArrayList<>();
+            // Kiến xây dựng giải pháp dùng DSATUR
+            constructSolutionsDSATUR(ants, numNodes, pheromoneMatrix, alpha, validNodes, numColors, nodeDegrees);
+            
+            // Cập nhật Pheromone
+            updatePheromones(numNodes, pheromoneMatrix, rho, ants, numColors);
 
-	    // Nếu tìm thấy đường đi (đề phòng trường hợp chưa tìm ra thì fallback về sortedNodes)
-	    List<Integer> pathOrderToUse = bestTourOrder.isEmpty() ? 
-	                                   sortedNodes.stream().map(Node::getId).collect(Collectors.toList()) : 
-	                                   bestTourOrder;
+            // Tìm con kiến tốt nhất vòng này
+            boolean foundNewBest = false;
+            for (Ant ant : ants) {
+                int cost = ant.getNumberOfColorsUsed();
+                if (cost < bestSolutionQuality) {
+                    bestSolutionQuality = cost;
+                    System.arraycopy(ant.getSolution(), 0, bestSolution, 0, numNodes);
+                    bestTourOrder = new ArrayList<>(ant.getTourOrder());
+                    foundNewBest = true;
+                }
+            }
 
-	    int stepCount = 0;
-	    for (Integer nodeId : pathOrderToUse) {
-	        // Backend gửi danh sách Node ID theo đúng thứ tự kiến đã nhảy
-	        trace.add(new NodeColorAction(nodeId, bestSolution[nodeId], stepCount++));
-	    }
+            // LƯU HISTORY (Chỉ lưu khi có cải tiến hoặc đồ thị nhỏ để tránh tràn RAM)
+            if (foundNewBest || (numNodes < 200 && i % 10 == 0)) {
+                double[] currentConf = calculateACOConfidence(pheromoneMatrix, bestSolution, numColors);
+                history.add(new SimulationStep(i + 1, bestSolutionQuality, bestSolution.clone(), currentConf));
+                if (history.size() > 30) history.remove(0); // Giới hạn history
+            }
+        }
 
-	    return new SimulationResponse(countUniqueColors(bestSolution), bestSolution,calculateTotalConflicts(bestSolution, nodes), history, trace,duration,
-	    	    validNodes );
-	}
-	
-	private void initializePheromones(double[][] pheromoneMatrix, int numNodes, int numColors, double initialPheromone) {
-		for(int i=0;i<numNodes;i++) {
-			for(int j=0;j<numColors;j++) {
-				pheromoneMatrix[i][j]=initialPheromone;
-			}
-		}
-		
-	}
-	private double[] calculateACOConfidence(double[][] pheromoneMatrix, int[] currentSolution, int numColors) {
-	    int numNodes = currentSolution.length;
-	    double[] confidence = new double[numNodes];
+        long durationMs = (System.nanoTime() - startNano) / 1_000_000;
 
-	    for (int i = 0; i < numNodes; i++) {
-	        int selectedColor = currentSolution[i];
-	        if (selectedColor == -1) {
-	            confidence[i] = 0.0;
-	            continue;
-	        }
+        // --- 4. TẠO TRACE (CẮT TỈA CHO ĐỒ THỊ LỚN) ---
+        List<NodeColorAction> trace = new ArrayList<>();
+        // Chỉ gửi DetailedTrace nếu đồ thị < 300 nốt để tránh lỗi Broken Pipe (JSON quá to)
+        if (numNodes < 300) {
+            List<Integer> pathOrder = bestTourOrder.isEmpty() ? 
+                    validNodes.stream().map(Node::getId).collect(Collectors.toList()) : bestTourOrder;
+            int stepCount = 0;
+            for (Integer nodeId : pathOrder) {
+                trace.add(new NodeColorAction(nodeId, bestSolution[nodeId], stepCount++));
+            }
+        }
 
-	        double pBest = pheromoneMatrix[i][selectedColor]; // Mùi của màu tốt nhất
-	        double pSum = 0.0; // Tổng mùi của tất cả màu tại node này
-	        for (int c = 0; c < numColors; c++) {
-	            pSum += pheromoneMatrix[i][c];
-	        }
-
-	        // Tỷ lệ áp đảo của màu này (thường nằm trong khoảng 0.0 -> 1.0)
-	        confidence[i] = (pSum > 0) ? (pBest / pSum) : 0.0;
-	    }
-	    return confidence;
-	}
-	private void constructSolutions(Ant[] ants, int numNodes, double[][] matrix, double alpha, List<Node> nodes, int numColors, int[] walkingOrder) {
-	    for (Ant ant : ants) ant.reset();
-	    
-	    // Kiến đi theo thứ tự thông minh
-	    for (int i = 0; i < numNodes; i++) {
-	        int targetNodeId = walkingOrder[i]; // Lấy ID của Node ưu tiên
-	        for (Ant ant : ants) {
-	            int selectedColor = selectNextColor(ant, targetNodeId, matrix, alpha, nodes, numColors);
-	            ant.setColor(targetNodeId, selectedColor);
-	        }
-	    }
-	}
-	private void updatePheromones(int numNodes,double[][] pheromoneMatrix,double evaporationRate,Ant[] ants,int numColors) {
-		for(int i=0;i<numNodes;i++) {
-			for(int j=0;j<numColors;j++) {
-				 pheromoneMatrix[i][j] *= (1.0 - evaporationRate);
-			}
-		}
-		for(Ant ant: ants) {
-			int numColorsUsed = ant.getNumberOfColorsUsed();
-			double pheromoneToAdd = 1.0 / numColorsUsed;
-			int[] solution = ant.getSolution();
-			for(int i =0;i<solution.length;i++) {
-				int color=solution[i];
-				 pheromoneMatrix[i][color] += pheromoneToAdd;
-			}
-		}
-	}
-	
-	private List<Integer> findValidColors(Ant ant, int nodeId,List<Node> nodes,int numColors){
-		Set<Integer> usedByNeighbors = new HashSet<>();
-		Node currentNode = nodes.get(nodeId);
-		List<Integer> neighborIds = currentNode.getNeighbors();
-		for (Integer neighborId : neighborIds) {
-			int neighborColor = ant.getSolution()[neighborId];
-			if (neighborColor != -1) {
-				usedByNeighbors.add(neighborColor);
-			}
-		}
-		List<Integer> validColors = new ArrayList<>();
-		for (int color = 0; color < numColors; color++) {
-			if (!usedByNeighbors.contains(color)) {
-				validColors.add(color);
-			}
-		}
-		if (validColors.isEmpty()) {
-			List<Integer> allColors = new ArrayList<>();
-			for (int i = 0; i < numColors; i++) {
-			    allColors.add(i);
-			}
-			return allColors;
-		}
-		return validColors;
-	}
-	private int calculateTotalConflicts(int[] solution, List<Node> nodes) {
-	    int totalConflicts = 0;
-	    for (Node u : nodes) {
-	        int uId = u.getId();
-	        int uColor = solution[uId];
-	        
-	        // Duyệt qua tất cả hàng xóm của Node hiện tại
-	        for (int vId : u.getNeighbors()) {
-	            // Nếu hàng xóm trùng màu -> Phát hiện 1 lỗi
-	            if (uColor == solution[vId] && uColor != -1) {
-	                totalConflicts++;
-	            }
-	        }
-	    }
-	    // Vì đồ thị vô hướng, cạnh A-B được đếm 2 lần (lúc ở A và lúc ở B)
-	    // nên ta chia 2 để ra số lượng cạnh bị trùng màu thực tế.
-	    return totalConflicts / 2;
-	}
-	private double[] calculateConfidence(double[][] matrix, int[] sol, int numColors) {
-	    double[] conf = new double[sol.length];
-	    for(int n=0; n<sol.length; n++) {
-	        if(sol[n] == -1) { conf[n] = 0.1; continue; }
-	        double bestP = matrix[n][sol[n]];
-	        double totalP = 0;
-	        for(int c=0; c<numColors; c++) totalP += matrix[n][c];
-	        conf[n] = (totalP > 0) ? (bestP / totalP) : 0.1;
-	    }
-	    return conf;
-	}
-	private int countUniqueColors(int[] solution) {
-	    Set<Integer> uniqueColors = new HashSet<>();
-	    for (int color : solution) {
-	        if (color != -1) {
-	            uniqueColors.add(color);
-	        }
-	    }
-	    return uniqueColors.size();
-	}
-	private void constructSolutionsNodeDSATUR(Ant[] ants, int numNodes, double[][] pheromoneMatrix, 
-            double alpha, List<Node> nodes, int numColors, 
-            double initialPheromone, double beta /* int[] walkingOrder - BỎ CÁI NÀY ĐI */ ) {
-
-for (Ant ant : ants) {
-ant.reset();
-
-// 1. Quản lý danh sách các node chưa thăm (cho riêng con kiến này)
-Set<Integer> unvisitedNodes = new HashSet<>();
-for(int i=0; i<numNodes; i++) unvisitedNodes.add(i);
-
-// --- VÒNG LẶP XÂY DỰNG ---
-// Kiến tự quyết định Node nào tô tiếp theo, không theo danh sách có sẵn
-while (!unvisitedNodes.isEmpty()) {
-
-// BƯỚC A: CHỌN NODE TIẾP THEO (DYNAMIC HEURISTIC - DSATUR)
-int selectedNodeId = selectNextNodeDSATUR(ant, unvisitedNodes, nodes);
-
-// Xóa khỏi danh sách chưa thăm
-unvisitedNodes.remove(selectedNodeId); 
-
-// BƯỚC B: CHỌN MÀU CHO NODE ĐÓ (Như logic cũ, nhưng sửa lại heuristic)
-int selectedColor = selectNextColor(ant, selectedNodeId, pheromoneMatrix, alpha, nodes, numColors);
-
-// Set màu
-ant.setColor(selectedNodeId, selectedColor);
-
-
-}
-}
-}
-
-//Hàm hỗ trợ tìm Node tiếp theo theo DSATUR (Saturation Degree)
-private int selectNextNodeDSATUR(Ant ant, Set<Integer> unvisited, List<Node> nodes) {
-int bestNodeId = -1;
-int maxSaturation = -1;
-int maxDegree = -1;
-
-// Tìm các ứng viên tốt nhất (Candidate List)
-List<Integer> candidates = new ArrayList<>();
-
-for (int nodeId : unvisited) {
-// TÍNH SATURATION: Số lượng màu khác nhau đã tô ở hàng xóm
-Set<Integer> neighborColors = new HashSet<>();
-for (int neighbor : nodes.get(nodeId).getNeighbors()) {
-int c = ant.getSolution()[neighbor];
-if (c != -1) neighborColors.add(c);
-}
-int saturation = neighborColors.size();
-int degree = nodes.get(nodeId).getNeighbors().size();
-
-if (saturation > maxSaturation) {
-maxSaturation = saturation;
-maxDegree = degree;
-candidates.clear();
-candidates.add(nodeId);
-} else if (saturation == maxSaturation) {
-// Nếu Saturation bằng nhau, ưu tiên Bậc cao (Degree)
-if (degree > maxDegree) {
-maxDegree = degree;
-candidates.clear();
-candidates.add(nodeId);
-} else if (degree == maxDegree) {
-candidates.add(nodeId);
-}
-}
-}
-
-// TRẢ VỀ NGẪU NHIÊN TRONG SỐ CÁC ỨNG VIÊN TỐT NHẤT (RCL)
-// Để tránh việc kiến nào cũng đi y hệt nhau
-return candidates.get(new Random().nextInt(candidates.size())); 
-}
-private int selectNextColor(Ant ant,int nodeId,double [][] pheromoneMatrix,double alpha,List<Node> nodes,int numColors) {
-	List<Integer> validColors=findValidColors(ant, nodeId,nodes,numColors);
-	if (validColors.size()==1) {
-		return validColors.get(0);
-	}
-	double[] probabilities = new double[validColors.size()];
-	double probabilitiesSum = 0.0;
-	for(int i=0;i<validColors.size();i++) {
-		int color=validColors.get(i);
-		double pheromone =  pheromoneMatrix[nodeId][color];
-		double score = Math.pow(pheromone,  alpha);
-		probabilities[i] = score;
-		probabilitiesSum += score;
-	}
-	if (probabilitiesSum == 0) {
-        return validColors.get(new java.util.Random().nextInt(validColors.size()));
+        return new SimulationResponse(
+            bestSolutionQuality, 
+            bestSolution, 
+            calculateTotalConflicts(bestSolution, validNodes), 
+            history, 
+            trace, 
+            durationMs, 
+            validNodes
+        );
     }
-	double randomValue = Math.random() * probabilitiesSum;
-    double cumulativeSum = 0.0;
-    
-    for (int i = 0; i < validColors.size(); i++) {
-        cumulativeSum += probabilities[i];
-        if (cumulativeSum >= randomValue) {
-            return validColors.get(i); 
+
+    // ✅ TỐI ƯU 1: Dùng mảng boolean thay vì HashSet để tìm màu khả dụng
+    private List<Integer> findValidColorsOptimized(Ant ant, int nodeId, List<Node> nodes, int numColors) {
+        boolean[] usedColors = new boolean[numColors];
+        List<Integer> neighbors = nodes.get(nodeId).getNeighbors();
+        int[] currentSolution = ant.getSolution();
+
+        for (int neighborId : neighbors) {
+            int color = currentSolution[neighborId];
+            if (color != -1 && color < numColors) {
+                usedColors[color] = true;
+            }
+        }
+
+        List<Integer> validColors = new ArrayList<>();
+        for (int c = 0; c < numColors; c++) {
+            if (!usedColors[c]) validColors.add(c);
+        }
+
+        if (validColors.isEmpty()) {
+            for (int i = 0; i < numColors; i++) validColors.add(i);
+        }
+        return validColors;
+    }
+
+    private void constructSolutionsDSATUR(Ant[] ants, int numNodes, double[][] matrix, double alpha, 
+                                         List<Node> nodes, int numColors, int[] nodeDegrees) {
+        for (Ant ant : ants) {
+            ant.reset();
+            Set<Integer> unvisited = new HashSet<>();
+            for (int i = 0; i < numNodes; i++) unvisited.add(i);
+
+            while (!unvisited.isEmpty()) {
+                // Kiểm tra interrupt ngay trong vòng lặp con
+                if (Thread.currentThread().isInterrupted()) return;
+
+                int selectedNodeId = selectNextNodeDSATUR(ant, unvisited, nodes, nodeDegrees);
+                unvisited.remove(selectedNodeId);
+
+                int selectedColor = selectNextColor(ant, selectedNodeId, matrix, alpha, nodes, numColors);
+                ant.setColor(selectedNodeId, selectedColor);
+            }
         }
     }
-    
-	return validColors.get(validColors.size() - 1);
+
+    private int selectNextColor(Ant ant, int nodeId, double[][] matrix, double alpha, List<Node> nodes, int numColors) {
+        List<Integer> validColors = findValidColorsOptimized(ant, nodeId, nodes, numColors);
+        if (validColors.size() == 1) return validColors.get(0);
+
+        double[] probs = new double[validColors.size()];
+        double sum = 0.0;
+        for (int i = 0; i < validColors.size(); i++) {
+            int color = validColors.get(i);
+            double score = Math.pow(matrix[nodeId][color], alpha);
+            probs[i] = score;
+            sum += score;
+        }
+
+        if (sum == 0) return validColors.get(new Random().nextInt(validColors.size()));
+        
+        double r = Math.random() * sum;
+        double cumulative = 0.0;
+        for (int i = 0; i < probs.length; i++) {
+            cumulative += probs[i];
+            if (cumulative >= r) return validColors.get(i);
+        }
+        return validColors.get(validColors.size() - 1);
+    }
+
+    private int selectNextNodeDSATUR(Ant ant, Set<Integer> unvisited, List<Node> nodes, int[] nodeDegrees) {
+        int bestNodeId = -1;
+        int maxSaturation = -1;
+        int maxDegree = -1;
+        List<Integer> candidates = new ArrayList<>();
+
+        int[] sol = ant.getSolution();
+
+        for (int nodeId : unvisited) {
+            // TÍNH NHANH SATURATION
+            Set<Integer> neighborColors = new HashSet<>();
+            for (int neighbor : nodes.get(nodeId).getNeighbors()) {
+                if (sol[neighbor] != -1) neighborColors.add(sol[neighbor]);
+            }
+            int saturation = neighborColors.size();
+            int degree = nodeDegrees[nodeId];
+
+            if (saturation > maxSaturation) {
+                maxSaturation = saturation; maxDegree = degree;
+                candidates.clear(); candidates.add(nodeId);
+            } else if (saturation == maxSaturation) {
+                if (degree > maxDegree) {
+                    maxDegree = degree; candidates.clear(); candidates.add(nodeId);
+                } else if (degree == maxDegree) {
+                    candidates.add(nodeId);
+                }
+            }
+        }
+        return candidates.get(new Random().nextInt(candidates.size()));
+    }
+
+    private void updatePheromones(int numNodes, double[][] matrix, double rho, Ant[] ants, int numColors) {
+        // Bay hơi
+        double retainRate = 1.0 - rho;
+        for (int i = 0; i < numNodes; i++) {
+            for (int j = 0; j < numColors; j++) matrix[i][j] *= retainRate;
+        }
+        // Thêm mùi
+        for (Ant ant : ants) {
+            double deposit = 1.0 / ant.getNumberOfColorsUsed();
+            int[] sol = ant.getSolution();
+            for (int i = 0; i < numNodes; i++) {
+                int c = sol[i];
+                if (c != -1) matrix[i][c] += deposit;
+            }
+        }
+    }
+
+    private void initializePheromones(double[][] matrix, int numNodes, int numColors, double initialPheromone) {
+        for (int i = 0; i < numNodes; i++) {
+            for (int j = 0; j < numColors; j++) matrix[i][j] = initialPheromone;
+        }
+    }
+
+    private double[] calculateACOConfidence(double[][] matrix, int[] sol, int numColors) {
+        double[] conf = new double[sol.length];
+        for (int i = 0; i < sol.length; i++) {
+            int c = sol[i];
+            if (c == -1) { conf[i] = 0.0; continue; }
+            double sum = 0;
+            for (int j = 0; j < numColors; j++) sum += matrix[i][j];
+            conf[i] = (sum > 0) ? (matrix[i][c] / sum) : 0.0;
+        }
+        return conf;
+    }
+
+    private int calculateTotalConflicts(int[] solution, List<Node> nodes) {
+        int total = 0;
+        for (Node u : nodes) {
+            int uId = u.getId();
+            for (int vId : u.getNeighbors()) {
+                if (solution[uId] != -1 && solution[uId] == solution[vId]) total++;
+            }
+        }
+        return total / 2;
+    }
+
+    private int countUniqueColors(int[] solution) {
+        Set<Integer> colors = new HashSet<>();
+        for (int c : solution) if (c != -1) colors.add(c);
+        return colors.size();
+    }
 }
-}
- 
