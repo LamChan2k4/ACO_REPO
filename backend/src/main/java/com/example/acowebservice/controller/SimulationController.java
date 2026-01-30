@@ -1,22 +1,16 @@
 package com.example.acowebservice.controller;
 
-import java.util.Collections;
-import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import com.example.acowebservice.*;
+import java.util.Collections;
+import java.util.List;
 
 @RestController
 @CrossOrigin(origins = "*")
 public class SimulationController {
-
-    public SimulationController() {
-        System.out.println("====================================================");
-        System.out.println(">>> 🚀 [SERVER] Controller Ready with Task Management!");
-        System.out.println("====================================================");
-    }
 
     @Autowired private TaskControlService taskControlService;
     @Autowired private GAService gaService;
@@ -26,38 +20,24 @@ public class SimulationController {
     @Autowired private SimpleGreedyService simpleGreedyService;
     @Autowired private DimacsService dimacsService;
 
-    /**
-     * API 1: Chạy mô phỏng qua dữ liệu JSON (đồ thị vẽ tay trên web)
-     */
     @PostMapping("/api/simulate")
-    public Object runSimulation(@RequestBody SimulationRequest request) {
-        // --- QUY TRÌNH QUẢN LÝ LUỒNG ---
-        taskControlService.interruptExistingTask();         // Dừng task cũ nếu có
-        taskControlService.registerTask(Thread.currentThread()); // Đăng ký task hiện tại
+    public ResponseEntity<?> runSimulation(@RequestBody SimulationRequest request) {
+        taskControlService.interruptExistingTask();
+        taskControlService.registerTask(Thread.currentThread());
 
-        String algo = (request.getAlgorithm() != null) ? request.getAlgorithm() : "AS";
-        System.out.println("\n>>> [INPUT] UI REQUEST: " + algo.toUpperCase());
-
-        SolverStrategy solver = selectSolver(algo);
-
-        if (request.getNumberOfRuns() != null && request.getNumberOfRuns() > 1) {
-            System.out.println(">>> Chế độ: Thực nghiệm (" + request.getNumberOfRuns() + " lần)");
-            return Collections.singletonMap("experimentReport", solver.runExperiment(request));
-        } else {
+        try {
+            SolverStrategy solver = selectSolver(request.getAlgorithm());
             SimulationResponse response = solver.solve(request);
-            
-            System.out.println(">>> ✅ [COMPLETE] Best: " + response.getBestQuality() + " colors");
-            System.out.println(">>> ⏱️ Performance: " + response.getExecutionTimeMs() + " ms");
-            return response;
+
+            if (Thread.currentThread().isInterrupted()) return ResponseEntity.status(204).build();
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return handleException(e);
         }
     }
 
-    /**
-     * API 2: Giải bài toán qua file DIMACS (.col)
-     * Đã bổ sung các tham số q0, mutationRate, tournamentSize để tránh lỗi NULL
-     */
     @PostMapping("/api/aco/solve-dimacs")
-    public ResponseEntity<SimulationResponse> solveWithDimacs(
+    public ResponseEntity<?> solveWithDimacs(
             @RequestParam("file") MultipartFile file,
             @RequestParam("algorithm") String algorithm,
             @RequestParam("numAnts") int numAnts,
@@ -66,23 +46,15 @@ public class SimulationController {
             @RequestParam("alpha") double alpha,
             @RequestParam("beta") double beta,
             @RequestParam("evaporation") double evaporation,
-            // --- CÁC THAM SỐ BỔ SUNG ĐỂ FIX LỖI NULL ---
-            @RequestParam(value = "q0", required = false, defaultValue = "0.9") Double q0,
-            @RequestParam(value = "mutationRate", required = false, defaultValue = "0.05") Double mutationRate,
-            @RequestParam(value = "tournamentSize", required = false, defaultValue = "5") Integer tournamentSize
+            @RequestParam(value = "q0", defaultValue = "0.9") Double q0,
+            @RequestParam(value = "mutationRate", defaultValue = "0.05") Double mutationRate,
+            @RequestParam(value = "tournamentSize", defaultValue = "5") Integer tournamentSize
     ) {
-        // --- QUY TRÌNH QUẢN LÝ LUỒNG ---
         taskControlService.interruptExistingTask();
         taskControlService.registerTask(Thread.currentThread());
 
-        System.out.println("\n>>> 📁 [DIMACS] Processing file: " + file.getOriginalFilename());
-        
         try {
-            // 1. Parser file .col thành danh sách Node
             List<Node> nodes = dimacsService.parseDimacsFile(file);
-            System.out.println(">>> Nodes parsed: " + nodes.size());
-
-            // 2. Build request object đầy đủ tham số
             SimulationRequest request = new SimulationRequest();
             request.setNodes(nodes);
             request.setAlgorithm(algorithm);
@@ -92,53 +64,41 @@ public class SimulationController {
             request.setAlpha(alpha);
             request.setBeta(beta);
             request.setEvaporation(evaporation);
-            
-            // Nạp các tham số đặc thù vào request
             request.setQ0(q0);
             request.setMutationRate(mutationRate);
             request.setTournamentSize(tournamentSize);
 
-            // 3. Chọn thuật toán và giải
             SolverStrategy solver = selectSolver(algorithm);
-            System.out.println(">>> 🧠 Algorithm in Progress: " + algorithm.toUpperCase());
-            
             SimulationResponse response = solver.solve(request);
 
-            System.out.println(">>> 🎯 [FINAL] Success! Best: " + response.getBestQuality() + " colors");
-            System.out.println(">>> 🕒 Execution Time: " + response.getExecutionTimeMs() + " ms");
-
+            if (Thread.currentThread().isInterrupted()) return ResponseEntity.status(204).build();
             return ResponseEntity.ok(response);
-
         } catch (Exception e) {
-            System.err.println(">>> ❌ Error processing DIMACS: " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.internalServerError().build();
+            return handleException(e);
         }
     }
 
-    /**
-     * API 3: Dọn dẹp khẩn cấp (Dùng khi Browser Refresh/Close)
-     */
     @GetMapping("/api/aco/stop")
-    public ResponseEntity<String> stopComputation() {
-        System.out.println(">>> 🛑 [SIGNAL] Nhận lệnh dừng từ hệ thống...");
+    public ResponseEntity<String> stopAll() {
         taskControlService.interruptExistingTask();
-        return ResponseEntity.ok("All background tasks have been flagged for termination.");
+        return ResponseEntity.ok("Cleared");
     }
 
-    /**
-     * Lựa chọn chiến thuật giải thuật
-     */
-    private SolverStrategy selectSolver(String algoType) {
-        if (algoType == null) return asService;
-        
-        switch (algoType.toUpperCase()) {
+    private ResponseEntity<?> handleException(Exception e) {
+        if (Thread.currentThread().isInterrupted()) {
+            System.out.println(">>> [INFO] Luồng đã dừng thành công, hủy bỏ phản hồi.");
+            return ResponseEntity.status(204).build();
+        }
+        e.printStackTrace();
+        return ResponseEntity.internalServerError().body("Error: " + e.getMessage());
+    }
+
+    private SolverStrategy selectSolver(String algo) {
+        switch (algo.toUpperCase()) {
             case "ACS": return acsService;
-            case "GA": return gaService;
             case "MMAS": return mmasService;
-            case "SIMPLEGREEDY":
-            case "GREEDY": return simpleGreedyService;
-            case "AS":
+            case "GA": return gaService;
+            case "SIMPLEGREEDY": return simpleGreedyService;
             default: return asService;
         }
     }
