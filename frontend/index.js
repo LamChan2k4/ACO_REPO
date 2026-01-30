@@ -73,6 +73,12 @@ function hexToRgba(hex, alpha) {
 // ==========================================
 // 4. QUẢN LÝ ĐỒ THỊ (VIS.JS)
 // ==========================================
+const getVal = (id, def) => {
+    const el = document.getElementById(id);
+    if (!el) return def;
+    const val = parseFloat(el.value);
+    return isNaN(val) ? def : val;
+};
 
 function generateRandomGraph() {
     const count = parseInt(document.getElementById("nodeCount").value) || 20;
