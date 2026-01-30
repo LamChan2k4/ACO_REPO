@@ -162,12 +162,12 @@ function renderNetwork() {
     });
 }
 
-function updateColorsImmediate(solution) {
-    if (!solution) return;
-    const updates = solution.map((color, nodeId) => ({
+function updateColorsImmediate(solutionArray) {
+    if (!solutionArray) return;
+    const updates = solutionArray.map((colorIndex, nodeId) => ({
         id: nodeId,
-        color: { background: getColorForIndex(color), border: '#222' },
-        label: `ID:${nodeId}\nC:${color}`
+        color: { background: getColorForIndex(colorIndex), border: '#000' },
+        label: `ID:${nodeId}\n(C:${colorIndex})`
     }));
     graphData.nodes.update(updates);
 }
@@ -180,43 +180,46 @@ async function callSolver(endpoint, options, isLarge = false) {
     const status = document.getElementById("status");
     const bench = document.getElementById("benchmark-card");
     const btn = document.getElementById("btnRun");
-    const url = API_BASE + endpoint; 
 
-    status.innerText = "⏳ Bầy kiến Java đang tính toán...";
-    btn.disabled = true;
+    status.innerText = "⏳ Bầy kiến Java đang giải toán (Vui lòng đợi)...";
+    if (btn) btn.disabled = true;
 
     try {
-        const response = await fetch(url, options);
+        // API_BASE sẽ là http://localhost:8081 nếu ở laptop
+        const response = await fetch(API_BASE + endpoint, options);
+        
         if (!response.ok) {
-            const txt = await response.text();
-            throw new Error(`Server ${response.status}: ${txt}`);
+            const errTxt = await response.text();
+            throw new Error(`Server báo lỗi ${response.status}: ${errTxt}`);
         }
         
         const data = await response.json();
 
-        // HIỂN THỊ THỜI GIAN THẬT (Fix lỗi 0ms)
+        // Cập nhật bảng Benchmarking (Sale/Performance stats)
         if (bench) bench.style.display = "block";
         document.getElementById("res-colors").innerText = data.bestQuality;
-        
-        // Nếu là 0, ghi là < 1ms để người dùng biết máy quá nhanh
+        // Fix vụ 0ms: Nếu máy giải quá nhanh thì hiện < 1
         document.getElementById("res-time").innerText = (data.executionTimeMs === 0) ? "< 1" : data.executionTimeMs;
         
+        // Lưu kết quả vào bộ nhớ toàn cục để Replay
         lastBestSolution = data.bestSolution;
         lastDetailedTrace = data.detailedTrace;
 
+        // Xử lý hiển thị dựa trên kích thước đồ thị
         if (isLarge || !data.history || data.history.length === 0) {
             updateColorsImmediate(data.bestSolution);
-            status.innerText = "✅ Kết quả hiển thị tức thì cho dữ liệu lớn.";
+            status.innerText = "✅ Đã giải xong đồ thị lớn!";
         } else {
             status.innerText = "🎬 Đang tái hiện quá trình hội tụ...";
             await playHistoryAnimation(data.history);
+            status.innerText = "✅ Hoàn tất quá trình tối ưu!";
         }
 
     } catch (e) {
+        console.error(">>> FETCH ERROR:", e);
         status.innerText = "❌ Lỗi: " + e.message;
-        console.error(e);
     } finally {
-        btn.disabled = false;
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -529,6 +532,54 @@ async function replayWithAntMovement() {
         await new Promise(r => setTimeout(r, 100));
     }
     status.innerText = "🎉 Replay hoàn tất!";
+}
+function runSimulation() {
+    // 1. Kiểm tra xem đã có nốt nào trên màn hình chưa
+    const allNodes = graphData.nodes.get();
+    if (allNodes.length === 0) return alert("Vui lòng tạo đồ thị trước nhé Lam!");
+
+    const allEdges = graphData.edges.get();
+    
+    // 2. Chuyển đổi dữ liệu sang định dạng Java Node.java (Thanh tra ID và Vị trí)
+    const javaNodes = allNodes.map(node => {
+        // Lấy vị trí thực tế trên UI để Replay không bị bay về tâm (0,0)
+        const pos = network.getPositions([node.id])[node.id] || { x: 0, y: 0 };
+        
+        return {
+            id: parseInt(node.id), // Ép kiểu Integer cho Java
+            x: pos.x,
+            y: pos.y,
+            neighbors: allEdges
+                .filter(e => e.from == node.id || e.to == node.id)
+                .map(e => parseInt(e.from == node.id ? e.to : e.from))
+        };
+    });
+
+    // 3. Đóng gói Payload gửi đi
+    const payload = {
+        algorithm: document.getElementById("algorithm").value,
+        nodes: javaNodes,
+        numAnts: Math.floor(getVal("numAnts", 30)),
+        maxIterations: Math.floor(getVal("iterations", 100)),
+        numColors: Math.floor(getVal("numColors", 20)),
+        alpha: getVal("alpha", 1.0),
+        beta: getVal("beta", 2.0),
+        evaporation: getVal("evaporation", 0.1),
+        // Thêm tham số ẩn cho ACS/GA nếu có
+        q0: getVal("q0", 0.9),
+        mutationRate: getVal("mutationRate", 0.05),
+        tournamentSize: Math.floor(getVal("tournamentSize", 5)),
+        numberOfRuns: 1
+    };
+
+    console.log(">>> [UI REQUEST] Gửi dữ liệu:", payload);
+
+    // 4. Gọi hàm Solver (Giải đồ thị nhỏ thì chạy phim, đồ thị to vẽ luôn)
+    callSolver("/api/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    }, javaNodes.length > 250);
 }
 function freezeGraph() {
     if (network) {
