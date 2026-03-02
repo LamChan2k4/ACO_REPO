@@ -2,8 +2,10 @@ services:
   aco-api:
     build: ./backend
     container_name: aco-api
-    expose: # Chỉ mở bên trong mạng docker
-      - "8081"
+    environment:
+      # Cấp 2GB RAM cho thoải mái nạp file DIMACS lớn
+      - JAVA_OPTS=-Xmx2048m -Xms512m
+    # Quan trọng: Nối chung mạng với Nginx và Oracle (nếu có)
     restart: always
 
   aco-web:
@@ -13,5 +15,7 @@ services:
       - "80:80"
     volumes:
       - ./frontend:/usr/share/nginx/html
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro # Gắn file cấu hình Nginx
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro # <-- Chú ý file config phải đúng tên
+    depends_on:
+      - aco-api
     restart: always
