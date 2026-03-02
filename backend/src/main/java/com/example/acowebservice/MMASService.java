@@ -11,20 +11,20 @@ public class MMASService implements SolverStrategy {
 
     @Override
     public SimulationResponse solve(SimulationRequest req) {
-        // 1. BẤM GIỜ NANO & KIỂM TRA ĐẦU VÀO
+        // 1. BẤM GIỜ NANO & KIỂM TRA ĐẦU VÀO (PHÒNG THỦ NULL)
         long startNano = System.nanoTime();
         
         List<Node> nodes = req.getNodes();
         if (nodes == null || nodes.isEmpty()) return new SimulationResponse();
 
-        // Lọc node hợp lệ
+        // Lọc nốt để đảm bảo tính ổn định của hệ thống
         List<Node> validNodes = nodes.stream()
                 .filter(n -> n != null && n.getId() != null)
                 .collect(Collectors.toList());
         
         int numNodes = validNodes.size();
         
-        // Lấy tham số an toàn (phòng thủ Null)
+        // Gán giá trị mặc định nếu tham số bị null (Tránh lỗi 400/NullPointer)
         int numAnts = (req.getNumAnts() != null) ? req.getNumAnts() : 30;
         int maxIterations = (req.getMaxIterations() != null) ? req.getMaxIterations() : 100;
         int numColors = (req.getNumColors() != null) ? req.getNumColors() : 20;
@@ -33,80 +33,109 @@ public class MMASService implements SolverStrategy {
         double rho = (req.getEvaporation() != null) ? req.getEvaporation() : 0.1;
 
         // 2. TIỀN XỬ LÝ (TỐI ƯU CHO PENTIUM)
-        // Cache bậc đỉnh để DSATUR chạy nhanh hơn
+        // Cache bậc đỉnh để thuật toán DSATUR chạy thần tốc
         int[] nodeDegrees = new int[numNodes];
         for (int i = 0; i < numNodes; i++) {
             nodeDegrees[i] = validNodes.get(i).getNeighbors().size();
         }
 
-        // Chạy tham lam nhanh để tính tauMax
-        int greedyQuality = runSimpleGreedyInner(validNodes, nodeDegrees);
+        // Chạy tham lam nhanh để xác định giới hạn mùi Pheromone (tauMax/tauMin)
+        int greedyQuality = runSimpleGreedyFast(validNodes, nodeDegrees, numColors);
         double tauMax = 1.0 / (rho * greedyQuality);
         double tauMin = tauMax / (2.0 * numNodes);
         
         double[][] pheromoneMatrix = new double[numNodes][numColors];
         for(int i = 0; i < numNodes; i++) Arrays.fill(pheromoneMatrix[i], tauMax);
 
-        // Khởi tạo bộ nhớ
+        // Khởi tạo bộ nhớ cho hạm đội kiến
         int[] globalBestSolution = new int[numNodes];
         Arrays.fill(globalBestSolution, -1);
-        int globalBestQuality = Integer.MAX_VALUE;
+        int globalBestQuality = Integer.MAX_VALUE;  // Mục tiêu phụ: Ít màu nhất
+        int globalBestConflicts = Integer.MAX_VALUE; // Mục tiêu chính: 0 xung đột
+        
         List<Integer> globalBestTourOrder = new ArrayList<>();
         List<SimulationStep> history = new ArrayList<>();
 
         Ant[] ants = new Ant[numAnts];
         for (int i = 0; i < numAnts; i++) ants[i] = new Ant(numNodes);
 
-        // 3. VÒNG LẶP CHÍNH (VÙNG TỐI ƯU HIỆU NĂNG)
+        // 3. VÒNG LẶP TIẾN HÓA CHÍNH (VÙNG TỐI ƯU HIỆU NĂNG)
         for (int i = 0; i < maxIterations; i++) {
-            // ✅ CƠ CHẾ TỰ HỦY KHI REFRESH WEB
+            // ✅ CƠ CHẾ TỰ HỦY: Giải phóng CPU ngay khi Refresh trình duyệt
             if (Thread.currentThread().isInterrupted()) {
-                System.out.println("🛑 [LOG] MMAS dừng khẩn cấp giải phóng CPU.");
+                System.out.println("🛑 [LOG] MMAS dừng để cứu hộ CPU Server.");
                 return new SimulationResponse();
             }
 
-            // Xây dựng lời giải
-            constructSolutionsDSATUR(ants, validNodes, numNodes, numColors, pheromoneMatrix, alpha, beta, nodeDegrees);
-
-            // Tìm kiến tốt nhất vòng này
-            Ant iterBestAnt = ants[0];
-            int iterBestQuality = iterBestAnt.getNumberOfColorsUsed();
+            // Mỗi con kiến xây dựng một giải pháp dựa trên mùi hương và luật DSATUR
             for (Ant ant : ants) {
-                if (ant.getNumberOfColorsUsed() < iterBestQuality) {
-                    iterBestQuality = ant.getNumberOfColorsUsed();
-                    iterBestAnt = ant;
+                ant.reset();
+                Set<Integer> unvisited = new HashSet<>();
+                for (int n = 0; n < numNodes; n++) unvisited.add(n);
+
+                while (!unvisited.isEmpty()) {
+                    if (Thread.currentThread().isInterrupted()) return new SimulationResponse();
+                    
+                    int nodeId = selectNextNodeDSATUR(ant, unvisited, validNodes, nodeDegrees);
+                    unvisited.remove(nodeId);
+                    
+                    // Sử dụng mảng Boolean O(N) để chọn màu cực nhanh
+                    int color = selectNextColorMMASFast(ant, nodeId, pheromoneMatrix, validNodes, numColors, alpha, beta);
+                    ant.setColor(nodeId, color);
                 }
             }
 
-            // Cập nhật kỷ lục Global (Cơ chế MMAS)
+            // ✅ CHỌN KIẾN TỐT NHẤT VÒNG (Tìm thằng ít lỗi nhất)
+            Ant iterBestAnt = null;
+            int iterMinConflicts = Integer.MAX_VALUE;
+            int iterMinColors = Integer.MAX_VALUE;
+
+            for (Ant ant : ants) {
+                int curConf = calculateTotalConflicts(ant.getSolution(), validNodes);
+                int curCols = ant.getNumberOfColorsUsed();
+
+                // Logic so sánh kép: Ít lỗi trước -> Ít màu sau
+                if (iterBestAnt == null || curConf < iterMinConflicts || (curConf == iterMinConflicts && curCols < iterMinColors)) {
+                    iterBestAnt = ant;
+                    iterMinConflicts = curConf;
+                    iterMinColors = curCols;
+                }
+            }
+
+            // Cập nhật Kỷ lục Thế giới (Global Best)
             boolean foundNewBest = false;
-            if (iterBestQuality < globalBestQuality) {
-                globalBestQuality = iterBestQuality;
+            if (iterMinConflicts < globalBestConflicts || (iterMinConflicts == globalBestConflicts && iterMinColors < globalBestQuality)) {
+                globalBestConflicts = iterMinConflicts;
+                globalBestQuality = iterMinColors;
                 System.arraycopy(iterBestAnt.getSolution(), 0, globalBestSolution, 0, numNodes);
                 globalBestTourOrder = new ArrayList<>(iterBestAnt.getTourOrder());
                 foundNewBest = true;
                 
-                // Reset biên Pheromone theo chất lượng mới
-                tauMax = 1.0 / (rho * globalBestQuality);
+                // Cập nhật lại biên mùi dựa trên kết quả mới xịn hơn
+                tauMax = 1.0 / (rho * (globalBestQuality + globalBestConflicts));
                 tauMin = tauMax / (2.0 * numNodes);
             }
 
-            // Bay hơi và Cập nhật Pheromone (Chỉ Elite được update)
-            updatePheromonesMMAS(pheromoneMatrix, globalBestSolution, globalBestQuality, rho, tauMin, tauMax);
+            // Bay hơi mùi cũ và củng cố mùi trên đường của "Nhà vô địch"
+            updatePheromonesMMAS(pheromoneMatrix, globalBestSolution, globalBestQuality, globalBestConflicts, rho, tauMin, tauMax);
 
-            // Lưu lịch sử (Cắt tỉa để tránh tràn RAM 8GB)
+            // Ghi lại lịch sử (Lưới lọc Pruning cho Pentium-kun)
             if (foundNewBest || (numNodes < 300 && i % 20 == 0)) {
-                double[] conf = (numNodes < 500) ? calculateConfidence(pheromoneMatrix, globalBestSolution, numColors) : new double[0];
+                double[] conf = (numNodes < 400) ? calculateConfidence(pheromoneMatrix, globalBestSolution, numColors) : new double[0];
                 history.add(new SimulationStep(i + 1, globalBestQuality, globalBestSolution.clone(), conf));
-                if (history.size() > 30) history.remove(0);
+                if (history.size() > 25) history.remove(0); // Chỉ giữ lại các frame quý giá
             }
+            
+            // Nếu đã tìm thấy 0 lỗi và số màu rất nhỏ, có thể dừng sớm để nghỉ ngơi
+            if (globalBestConflicts == 0 && globalBestQuality <= 3) break;
         }
 
-        long durationMs = (System.nanoTime() - startNano) / 1_000_000;
+        // 4. KẾT THÚC VÀ ĐÓNG GÓI DỮ LIỆU
+        long endTime = System.nanoTime();
+        long durationMs = (endTime - startNano) / 1_000_000;
 
-        // 4. ĐÓNG GÓI KẾT QUẢ (CẮT TỈA JSON CHO ĐỒ THỊ LỚN)
+        // Cắt tỉa trace nếu nốt quá nhiều (Tránh Broken Pipe khi gửi JSON khổng lồ)
         List<NodeColorAction> trace = new ArrayList<>();
-        // Nếu đồ thị > 300 nốt, bỏ qua detailedTrace để tránh lỗi Broken Pipe (JSON quá nặng)
         if (numNodes < 300) {
             List<Integer> path = globalBestTourOrder.isEmpty() ? 
                     validNodes.stream().map(Node::getId).collect(Collectors.toList()) : globalBestTourOrder;
@@ -114,61 +143,43 @@ public class MMASService implements SolverStrategy {
             for (int id : path) trace.add(new NodeColorAction(id, globalBestSolution[id], step++));
         }
 
+        System.out.println(">>> [MMAS] Finished in: " + durationMs + "ms | Colors: " + globalBestQuality + " | Conflicts: " + globalBestConflicts);
+
         return new SimulationResponse(
-            globalBestQuality, 
-            globalBestSolution, 
-            calculateTotalConflicts(globalBestSolution, validNodes), 
-            history, 
-            trace, 
-            durationMs, 
-            validNodes
+            globalBestQuality,               // bestQuality
+            globalBestSolution,              // bestSolution
+            globalBestConflicts,             // conflicts
+            history,                         // history
+            trace,                           // detailedTrace
+            durationMs,                      // executionTimeMs
+            validNodes                       // 🔴 TRẢ VỀ NODES ĐỂ FRONTEND HIỆN MAP
         );
     }
 
-    // ==================== CÁC HÀM TỐI ƯU CỐT LÕI ====================
+    // ==================== CÁC HÀM TIỆN ÍCH TỐI ƯU ====================
 
-    private void constructSolutionsDSATUR(Ant[] ants, List<Node> nodes, int numNodes, int numColors, 
-                                        double[][] matrix, double alpha, double beta, int[] nodeDegrees) {
-        for (Ant ant : ants) {
-            ant.reset();
-            Set<Integer> unvisited = new HashSet<>();
-            for (int i = 0; i < numNodes; i++) unvisited.add(i);
-
-            while (!unvisited.isEmpty()) {
-                if (Thread.currentThread().isInterrupted()) return;
-
-                int nodeId = selectNextNodeDSATUR(ant, unvisited, nodes, nodeDegrees);
-                unvisited.remove(nodeId);
-                
-                int color = selectNextColorMMAS(ant, nodeId, matrix, nodes, numColors, alpha, beta);
-                ant.setColor(nodeId, color);
-            }
-        }
-    }
-
-    private int selectNextColorMMAS(Ant ant, int nodeId, double[][] matrix, List<Node> nodes, 
-                                   int numColors, double alpha, double beta) {
-        // ✅ TỐI ƯU: Sử dụng mảng boolean thay cho contains()
-        boolean[] used = new boolean[numColors];
-        for (int neighborId : nodes.get(nodeId).getNeighbors()) {
-            int c = ant.getSolution()[neighborId];
-            if (c != -1 && c < numColors) used[c] = true;
+    private int selectNextColorMMASFast(Ant ant, int nodeId, double[][] matrix, List<Node> nodes, int numColors, double alpha, double beta) {
+        // ✅ TỐI ƯU $O(N)$: Mảng boolean đánh dấu màu đã dùng
+        boolean[] isTaken = new boolean[numColors];
+        for (int neigh : nodes.get(nodeId).getNeighbors()) {
+            int color = ant.getSolution()[neigh];
+            if (color != -1 && color < numColors) isTaken[color] = true;
         }
 
         List<Integer> valid = new ArrayList<>();
-        for (int i = 0; i < numColors; i++) if (!used[i]) valid.add(i);
+        for (int i = 0; i < numColors; i++) if (!isTaken[i]) valid.add(i);
         
-        if (valid.isEmpty()) return random.nextInt(numColors); // Fallback nếu kẹt màu
+        // Nếu không có màu nào trống (Ràng buộc quá chặt), chấp nhận chọn bừa và sinh conflict
+        if (valid.isEmpty()) return random.nextInt(numColors);
         if (valid.size() == 1) return valid.get(0);
 
-        // Tính xác suất
+        // Roulette Wheel Selection (Tung xúc xắc theo nồng độ mùi)
         double[] probs = new double[valid.size()];
         double sum = 0;
         double heuristic = nodes.get(nodeId).getNeighbors().size() + 0.1;
 
         for (int i = 0; i < valid.size(); i++) {
-            int c = valid.get(i);
-            probs[i] = Math.pow(matrix[nodeId][c], alpha) * Math.pow(heuristic, beta);
+            probs[i] = Math.pow(matrix[nodeId][valid.get(i)], alpha) * Math.pow(heuristic, beta);
             sum += probs[i];
         }
 
@@ -181,8 +192,7 @@ public class MMASService implements SolverStrategy {
         return valid.get(valid.size() - 1);
     }
 
-    private void updatePheromonesMMAS(double[][] matrix, int[] bestSol, int bestQuality, 
-                                     double rho, double tMin, double tMax) {
+    private void updatePheromonesMMAS(double[][] matrix, int[] bestSol, int bestQ, int bestC, double rho, double tMin, double tMax) {
         double retain = 1.0 - rho;
         for (int i = 0; i < matrix.length; i++) {
             for (int j = 0; j < matrix[i].length; j++) {
@@ -190,7 +200,8 @@ public class MMASService implements SolverStrategy {
                 if (matrix[i][j] < tMin) matrix[i][j] = tMin;
             }
         }
-        double deposit = 1.0 / bestQuality;
+        // Thêm mùi dựa trên chất lượng (càng ít lỗi, ít màu thì mùi càng đậm)
+        double deposit = 1.0 / (double)(bestQ + bestC + 1);
         for (int i = 0; i < bestSol.length; i++) {
             int color = bestSol[i];
             if (color != -1) {
@@ -200,8 +211,8 @@ public class MMASService implements SolverStrategy {
         }
     }
 
-    private int selectNextNodeDSATUR(Ant ant, Set<Integer> unvisited, List<Node> nodes, int[] nodeDegrees) {
-        int bestId = -1; int maxSat = -1; int maxDeg = -1;
+    private int selectNextNodeDSATUR(Ant ant, Set<Integer> unvisited, List<Node> nodes, int[] degrees) {
+        int bestId = -1; int maxSat = -1;
         List<Integer> candidates = new ArrayList<>();
         int[] sol = ant.getSolution();
 
@@ -211,36 +222,29 @@ public class MMASService implements SolverStrategy {
                 if (sol[neigh] != -1) nColors.add(sol[neigh]);
             }
             int sat = nColors.size();
-            int deg = nodeDegrees[id];
-
             if (sat > maxSat) {
-                maxSat = sat; maxDeg = deg; candidates.clear(); candidates.add(id);
+                maxSat = sat; candidates.clear(); candidates.add(id);
             } else if (sat == maxSat) {
-                if (deg > maxDeg) {
-                    maxDeg = deg; candidates.clear(); candidates.add(id);
-                } else if (deg == maxDeg) candidates.add(id);
+                candidates.add(id);
             }
         }
+        // Trả về ngẫu nhiên giữa các thằng cùng độ Saturation cao để tăng tính thám hiểm
         return candidates.get(random.nextInt(candidates.size()));
     }
 
-    private int runSimpleGreedyInner(List<Node> nodes, int[] degrees) {
+    private int runSimpleGreedyFast(List<Node> nodes, int[] degrees, int limit) {
         int num = nodes.size();
-        int[] sol = new int[num];
-        Arrays.fill(sol, -1);
-        
+        int[] sol = new int[num]; Arrays.fill(sol, -1);
         List<Integer> order = new ArrayList<>();
         for(int i=0; i<num; i++) order.add(i);
         order.sort((a, b) -> degrees[b] - degrees[a]);
 
         for (int id : order) {
             boolean[] used = new boolean[num + 1];
-            for (int neigh : nodes.get(id).getNeighbors()) {
-                if (sol[neigh] != -1) used[sol[neigh]] = true;
-            }
-            int color = 0;
-            while (used[color]) color++;
-            sol[id] = color;
+            for (int n : nodes.get(id).getNeighbors()) if(sol[n] != -1) used[sol[n]] = true;
+            int c = 0;
+            while(used[c]) c++;
+            sol[id] = c;
         }
         Set<Integer> unique = new HashSet<>();
         for (int c : sol) unique.add(c);
@@ -251,7 +255,7 @@ public class MMASService implements SolverStrategy {
         double[] conf = new double[sol.length];
         for (int i = 0; i < sol.length; i++) {
             int c = sol[i];
-            if (c == -1) { conf[i] = 0.0; continue; }
+            if (c == -1) continue;
             double sum = 0;
             for (int j = 0; j < numColors; j++) sum += matrix[i][j];
             conf[i] = (sum > 0) ? (matrix[i][c] / sum) : 0.0;
@@ -260,19 +264,13 @@ public class MMASService implements SolverStrategy {
     }
 
     private int calculateTotalConflicts(int[] solution, List<Node> nodes) {
-        int total = 0;
+        int conflicts = 0;
         for (Node u : nodes) {
             int uId = u.getId();
             for (int vId : u.getNeighbors()) {
-                if (solution[uId] != -1 && solution[uId] == solution[vId]) total++;
+                if (solution[uId] != -1 && solution[uId] == solution[vId]) conflicts++;
             }
         }
-        return total / 2;
-    }
-
-    private int countUniqueColors(int[] solution) {
-        Set<Integer> colors = new HashSet<>();
-        for (int c : solution) if (c != -1) colors.add(c);
-        return colors.size();
+        return conflicts / 2;
     }
 }

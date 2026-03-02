@@ -9,7 +9,7 @@ public class SimpleGreedyService implements SolverStrategy {
 
     @Override
     public SimulationResponse solve(SimulationRequest req) {
-        // --- 1. KHỞI TẠO VÀ BẤM GIỜ NANO ---
+        // --- 1. BẮT ĐẦU BẤM GIỜ NANO (Độ chính xác cao cho dân DS) ---
         long startNano = System.nanoTime(); 
         
         List<Node> nodes = req.getNodes();
@@ -17,7 +17,7 @@ public class SimpleGreedyService implements SolverStrategy {
             return new SimulationResponse();
         }
 
-        // Lọc node rác bảo vệ server
+        // Lọc node bảo vệ Server-kun
         List<Node> validNodes = nodes.stream()
                 .filter(n -> n != null && n.getId() != null)
                 .collect(Collectors.toList());
@@ -27,57 +27,55 @@ public class SimpleGreedyService implements SolverStrategy {
         }
 
         int numNodes = validNodes.size();
+        int colorLimit = (req.getNumColors() != null) ? req.getNumColors() : numNodes;
         int[] solution = new int[numNodes];
         Arrays.fill(solution, -1);
 
-        // --- 2. TIỀN XỬ LÝ (WELCH-POWELL) ---
-        // Sắp xếp các node theo bậc giảm dần (Đỉnh khó tô trước)
+        // --- 2. TIỀN XỬ LÝ: SẮP XẾP BẬC ĐỈNH (WELCH-POWELL) ---
         List<Node> sortedNodes = new ArrayList<>(validNodes);
+        // Sắp xếp giảm dần: Node nhiều hàng xóm nhất đứng đầu
         sortedNodes.sort((n1, n2) -> n2.getNeighbors().size() - n1.getNeighbors().size());
 
-        // ✅ TỐI ƯU: Sử dụng mảng boolean dùng chung để check màu hàng xóm
-        // Không tạo mới HashSet trong vòng lặp để cứu chip Pentium
-        boolean[] usedColors = new boolean[numNodes + 1]; 
+        // ✅ TỐI ƯU SIÊU CẤP: Sử dụng mảng boolean đánh dấu thay cho HashSet
+        // Pentium xử lý mảng này cực kỳ "nhàn nhã"
+        boolean[] usedByNeighbors = new boolean[numNodes + 1];
 
-        // --- 3. VÒNG LẶP TÔ MÀU CHÍNH ---
+        // --- 3. VÒNG LẶP TÔ MÀU THAM LAM ---
         for (Node node : sortedNodes) {
-            // Kiểm tra tín hiệu dừng từ hệ thống (F5/Refresh)
+            // Kiểm tra tín hiệu ngắt (Dành cho việc dọn Task từ Controller)
             if (Thread.currentThread().isInterrupted()) {
-                System.out.println("🛑 [LOG] SimpleGreedy dừng khẩn cấp.");
+                System.out.println("🛑 [LOG] SimpleGreedy dừng khẩn cấp!");
                 return new SimulationResponse();
             }
 
-            // Reset mảng đánh dấu (Nhanh hơn tạo mới HashSet)
-            Arrays.fill(usedColors, false);
+            // Làm sạch mảng đánh dấu trước khi xét hàng xóm của Node hiện tại
+            Arrays.fill(usedByNeighbors, false);
 
-            // Đánh dấu các màu mà hàng xóm đã dùng
             for (int neighborId : node.getNeighbors()) {
-                // Kiểm tra neighborId có hợp lệ trong mảng solution không
+                // Chỉ đánh dấu nếu neighborId nằm trong giải số nốt hợp lệ
                 if (neighborId >= 0 && neighborId < numNodes) {
-                    int color = solution[neighborId];
-                    if (color != -1) {
-                        usedColors[color] = true;
+                    int assignedColor = solution[neighborId];
+                    if (assignedColor != -1) {
+                        usedByNeighbors[assignedColor] = true;
                     }
                 }
             }
 
-            // Tìm màu nhỏ nhất chưa bị hàng xóm dùng
+            // Quy tắc tham lam: Chọn màu số nhỏ nhất còn trống
             int color = 0;
-            while (usedColors[color]) {
+            while (usedByNeighbors[color]) {
                 color++;
             }
             solution[node.getId()] = color;
         }
 
-        long durationMs = (System.nanoTime() - startNano) / 1_000_000;
-        
-        if (durationMs == 0) {
-            System.out.println(">>> [SimpleGreedy] Super fast! Execution < 1ms");
-        }
+        // ⏱️ Kết thúc bấm giờ
+        long endTime = System.nanoTime();
+        long durationMs = (endTime - startNano) / 1_000_000;
 
-        // --- 4. TẠO TRACE REPLAY (CẮT TỈA CHO ĐỒ THỊ LỚN) ---
+        // --- 4. TRACE VÀ TRẢ VỀ DỮ LIỆU ---
         List<NodeColorAction> trace = new ArrayList<>();
-        // Chỉ gửi Trace nếu đồ thị nhỏ (< 300 nốt) để tránh lỗi Broken Pipe (JSON quá nặng)
+        // 🔒 CHỐNG LỖI BROKEN PIPE: Đồ thị lớn thì không gửi DetailedTrace qua mạng
         if (numNodes < 300) {
             for (int i = 0; i < sortedNodes.size(); i++) {
                 int nid = sortedNodes.get(i).getId();
@@ -85,23 +83,38 @@ public class SimpleGreedyService implements SolverStrategy {
             }
         }
 
-        // Trả về kết quả (Greedy không có History tiến hóa)
+        System.out.println(">>> [SIMPLEGREEDY] Execution: " + durationMs + "ms | Colors: " + countUniqueColors(solution));
+
+        // Tính Conflicts thật tế dựa trên Colors Pool ông đã thiết lập trên Web
+        int actualConflicts = calculateTotalConflicts(solution, validNodes);
+
         return new SimulationResponse(
-                countUniqueColors(solution), 
-                solution, 
-                0,                 // Conflicts của tham lam luôn là 0 (vì nó né màu hàng xóm)
-                new ArrayList<>(), // History rỗng
-                trace, 
-                durationMs,
-                validNodes 
+                countUniqueColors(solution),    // 1. bestQuality
+                solution,                       // 2. bestSolution
+                actualConflicts,                // 3. conflicts (Dành cho R&D)
+                new ArrayList<>(),              // 4. history (Tham lam không có lịch sử tiến hóa)
+                trace,                          // 5. detailedTrace
+                durationMs,                     // 6. executionTimeMs
+                validNodes                      // 7. nodes (🔴 Để Frontend vẽ map Edges)
             );
     }
     
-    private int countUniqueColors(int[] solution) {
-        Set<Integer> colors = new HashSet<>();
-        for (int c : solution) {
-            if (c != -1) colors.add(c);
+    private int calculateTotalConflicts(int[] solution, List<Node> nodes) {
+        int conflicts = 0;
+        for (Node u : nodes) {
+            int uId = u.getId();
+            for (int vId : u.getNeighbors()) {
+                if (solution[uId] != -1 && solution[uId] == solution[vId]) conflicts++;
+            }
         }
-        return colors.size();
+        return conflicts / 2;
+    }
+
+    private int countUniqueColors(int[] solution) {
+        Set<Integer> unique = new HashSet<>();
+        for (int c : solution) {
+            if (c != -1) unique.add(c);
+        }
+        return unique.size();
     }
 }

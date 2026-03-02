@@ -30,7 +30,7 @@ public class SimulationResponse {
 		this.executionTimeMs = executionTimeMs;
 		this.nodes = nodes; // Lưu lại danh sách node có chứa neighbor
 	}
-
+    
     // --- GETTER & SETTER ---
     public List<Node> getNodes() { return nodes; }
     public void setNodes(List<Node> nodes) { this.nodes = nodes; }
