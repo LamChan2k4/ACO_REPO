@@ -142,7 +142,7 @@ async function callSolver(endpoint, options, isLarge = false) {
         // HIỂN THỊ KẾT QUẢ PHÂN TÍCH (Analysis)
         bench.style.display = "block";
         document.getElementById("res-colors").innerText = data.bestQuality;
-        document.getElementById("res-conflicts").innerText = data.conflicts; // Cột này cực quan trọng nãy ta mới fix
+        document.getElementById("res-conflicts").innerText = data.bestConflicts; // Cột này cực quan trọng nãy ta mới fix
         document.getElementById("res-time").innerText = (data.executionTimeMs === 0) ? "< 1" : data.executionTimeMs;
         
         lastBestSolution = data.bestSolution;
