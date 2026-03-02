@@ -6,7 +6,7 @@ public class SimulationResponse {
 	
     private int bestQuality;
     private int[] bestSolution;
-    private int conflicts;
+    private int bestConflicts;
     private List<SimulationStep> history;
     private List<NodeColorAction> detailedTrace;
     private long executionTimeMs;
@@ -19,12 +19,12 @@ public class SimulationResponse {
     }
 
     // --- 2. CONSTRUCTOR ĐẦY ĐỦ THAM SỐ (6 tham số cũ + 1 mới) ---
-    public SimulationResponse(int bestQuality, int[] bestSolution, int conflicts, List<SimulationStep> history,
+    public SimulationResponse(int bestQuality, int[] bestSolution, int bestConflicts, List<SimulationStep> history,
 			List<NodeColorAction> detailedTrace, long executionTimeMs, List<Node> nodes) {
 		super();
 		this.bestQuality = bestQuality;
 		this.bestSolution = bestSolution;
-		this.conflicts = conflicts;
+		this.bestConflicts = bestConflicts;
 		this.history = history;
 		this.detailedTrace = detailedTrace;
 		this.executionTimeMs = executionTimeMs;
@@ -41,8 +41,8 @@ public class SimulationResponse {
     public int[] getBestSolution() { return bestSolution; }
     public void setBestSolution(int[] bestSolution) { this.bestSolution = bestSolution; }
 
-    public int getConflicts() { return conflicts; }
-    public void setConflicts(int conflicts) { this.conflicts = conflicts; }
+    public int getBestConflicts() { return bestConflicts; }
+    public void setBestConflicts(int bestConflicts) { this.bestConflicts = bestConflicts; }
 
     public List<SimulationStep> getHistory() { return history; }
     public void setHistory(List<SimulationStep> history) { this.history = history; }
