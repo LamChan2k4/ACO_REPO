@@ -130,7 +130,7 @@ async function callSolver(endpoint, options, isLarge = false) {
 
     try {
         const response = await fetch(url, options);
-        if (response.status === 204) return; // Nếu bị dừng task thì thôi
+        if (response.status === 204) return; 
 
         if (!response.ok) {
             const err = await response.text();
@@ -139,35 +139,54 @@ async function callSolver(endpoint, options, isLarge = false) {
         
         const data = await response.json();
 
-        // HIỂN THỊ KẾT QUẢ PHÂN TÍCH (Analysis)
-        bench.style.display = "block";
+        // [LOGIC 1] CẬP NHẬT KẾT QUẢ PHÂN TÍCH (Analysis Dashboard)
+        if(bench) bench.style.display = "block";
         document.getElementById("res-colors").innerText = data.bestQuality;
-        document.getElementById("res-conflicts").innerText = data.bestConflicts; // Cột này cực quan trọng nãy ta mới fix
+        document.getElementById("res-conflicts").innerText = data.bestConflicts; 
         document.getElementById("res-time").innerText = (data.executionTimeMs === 0) ? "< 1" : data.executionTimeMs;
         
         lastBestSolution = data.bestSolution;
         lastDetailedTrace = data.detailedTrace;
 
-        // VẼ ĐỒ THỊ LẠI NẾU LÀ DỮ LIỆU TỪ FILE (ĐỂ HIỆN MAP)
-        if (data.nodes && data.nodes.length > 0) {
+        // [LOGIC 2] XỬ LÝ ĐỒ THỊ - KHAI HỎA THẬN TRỌNG ĐỂ TRÁNH TRÙNG ID
+        // Kiểm tra xem đây là kịch bản "Giải file .col" hay "Chạy trực tiếp"
+        const isFromDimacsFile = endpoint.includes("dimacs");
+        
+        if (isFromDimacsFile && data.nodes && data.nodes.length > 0) {
+            // Trường hợp từ file: Ta xóa trắng trận địa để xây lại toàn bộ Map
+            console.log("🛠 Xây lại cấu trúc đồ thị từ file...");
+            graphData.nodes.clear();
+            graphData.edges.clear();
             drawFromNodes(data.nodes, data.bestSolution);
+        } else {
+            // Trường hợp Simulation trên web: Nodes đã có rồi, TUYỆT ĐỐI không gọi drawFromNodes
+            // Ta chỉ cập nhật màu (sơn lại áo cho bầy kiến)
+            console.log("🎨 Đồ thị có sẵn, tiến hành sơn lại màu...");
+            updateColorsImmediate(data.bestSolution);
         }
 
-        // CHỌN CHẾ ĐỘ HIỂN THỊ: Vẽ ngay nếu đồ thị to, chạy phim nếu đồ thị bé
-        if (isLarge || (data.nodes && data.nodes.length > 250)) {
+        // [LOGIC 3] CHỌN CHẾ ĐỘ HIỂN THỊ (Animation vs Tức thì)
+        const nodeCount = data.nodes ? data.nodes.length : graphData.nodes.length;
+        
+        if (isLarge || nodeCount > 250) {
+            // Đồ thị khổng lồ: Update màu một nhát ăn ngay để tiết kiệm RAM PC 8GB
             updateColorsImmediate(data.bestSolution);
-            status.innerText = "✅ Xong! Hiện kết quả tức thì cho đồ thị lớn.";
+            status.innerText = "✅ Xong! Kết quả hiển thị tức thì.";
         } else if (data.history && data.history.length > 0) {
+            // Đồ thị nhỏ: Cho phép bầy kiến "tiến hóa" nhìn cho sướng mắt
             status.innerText = "🎬 Tái hiện quá trình tiến hóa...";
             await playHistoryAnimation(data.history);
+            status.innerText = "✅ Đã tối ưu xong!";
         } else {
             updateColorsImmediate(data.bestSolution);
+            status.innerText = "✅ Hoàn thành kịch bản.";
         }
 
     } catch (e) {
-        status.innerText = "❌ Lỗi kết nối!";
-        console.error(e);
+        status.innerText = "❌ Lỗi hệ thống: " + e.message;
+        console.error("ERROR COMMANDER:", e);
     } finally {
+        // Mở lại nút để hạm trưởng ra lệnh nhịp tiếp theo
         btn.disabled = false;
     }
 }
@@ -248,10 +267,19 @@ async function runDimacsSimulation() {
 
 function drawFromNodes(nodes, solution) {
     const newNodes = [], newEdges = [], seenEdges = new Set();
+    
     nodes.forEach(n => {
         const nodeId = n.id;
-        const color = solution[nodeId];
-        newNodes.push({ id: nodeId, label: `N:${nodeId}`, shape: 'dot', color: { background: getColorForIndex(color) } });
+        const colorIndex = solution[nodeId];
+        
+        // Dùng update thay vì add để không bao giờ bị Duplicate ID
+        newNodes.append({ 
+            id: nodeId, 
+            label: `N:${nodeId}`, 
+            shape: 'dot', 
+            color: { background: getColorForIndex(colorIndex) } 
+        });
+
         if (n.neighbors) {
             n.neighbors.forEach(neighId => {
                 const key = nodeId < neighId ? `${nodeId}-${neighId}` : `${neighId}-${nodeId}`;
@@ -262,9 +290,14 @@ function drawFromNodes(nodes, solution) {
             });
         }
     });
-    graphData.nodes.add(newNodes);
-    graphData.edges.add(newEdges);
-    network.setOptions({ physics: { enabled: true } }); // Cho nó lắc một chút rồi sẽ tự khóa
+
+    // Cập nhật lính mới vào trận địa (Hàm update cực thông minh)
+     graphData.nodes.update(newNodes); 
+    graphData.edges.update(newEdges);
+    
+    if (network) {
+        network.setOptions({ physics: { enabled: true } });
+    }
 }
 
 // ==========================================
