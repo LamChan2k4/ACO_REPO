@@ -271,9 +271,10 @@ function drawFromNodes(nodes, solution) {
     nodes.forEach(n => {
         const nodeId = n.id;
         const colorIndex = solution[nodeId];
+        const deg = n.neighbors ? n.neighbors.length : 0; 
         
         // Dùng update thay vì add để không bao giờ bị Duplicate ID
-        newNodes.append({ 
+        newNodes.push({ 
             id: nodeId, 
             label: `N:${nodeId}`, 
             shape: 'dot', 
@@ -354,9 +355,16 @@ function displayFileName() {
 
 function updateColorsImmediate(sol) {
     if(!sol) return;
-    graphData.nodes.update(sol.map((c, i) => ({ 
-        id: i, 
-        color: { background: getColorForIndex(c) },
-        label: `ID:${i}\nC:${c}` 
-    })));
+    graphData.nodes.update(sol.map((c, i) => {
+        // Lấy tất cả các cạnh liên quan đến Node này để đếm số láng giềng
+        const deg = graphData.edges.get({
+            filter: (edge) => edge.from == i || edge.to == i
+        }).length;
+
+        return { 
+            id: i, 
+            color: { background: getColorForIndex(c) },
+            label: `ID:${i}\nDeg:${deg}\nC:${c}` // Hiện ID, Số láng giềng (Deg), và Màu (C)
+        };
+    }));
 }
